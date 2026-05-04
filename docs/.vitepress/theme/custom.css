@@ -1,0 +1,19 @@
+.vp-doc table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.vp-doc th,
+.vp-doc td {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  vertical-align: top;
+}
+
+.vp-doc th code,
+.vp-doc td code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
