@@ -4,6 +4,28 @@ Nexori is the safety, transport, and orchestration layer for Hytale servers that
 
 It can stay simple, or it can become part of a larger server network.
 
+## What Nexori Is Not
+
+Nexori is not a proxy.
+
+It does not replace Hytale's server travel with a separate proxy network layer. Instead, Nexori builds on top of Hytale's native server referral flow and adds orchestration, safety, and context around it.
+
+That means Nexori focuses on things like:
+
+- signed and trusted travel payloads
+- shared secret and keypair-based server trust setup
+- server-to-server context handoff
+- player data handoff
+- queue and minigame orchestration
+- public API integration for custom minigame and rules mods
+- match state, placement, outcome, and result-reporting hooks for third-party minigames
+- in-game configuration and operations
+
+So the right mental model is not "proxy replacement." The better mental model is:
+
+- Hytale provides the travel primitive
+- Nexori secures it, configures it, and uses it to orchestrate multiplayer flows across servers
+
 ## What You Can Build
 
 | Setup | What Nexori Handles |
@@ -21,6 +43,7 @@ Nexori is not trying to own every game rule.
 
 Nexori owns infrastructure:
 
+- trusted use of Hytale's native cross-server travel flow
 - safe travel between servers
 - portal and queue entry points
 - minigame launch orchestration

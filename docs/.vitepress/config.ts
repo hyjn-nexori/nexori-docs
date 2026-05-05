@@ -43,6 +43,12 @@ export default withMermaid(
           ]
         },
         {
+          text: "Releases",
+          items: [
+            { text: "Nexori 2.2.0", link: "/releases/2.2.0" }
+          ]
+        },
+        {
           text: "Public API",
           items: [
             { text: "Minigame API", link: "/public-api/minigame-api" },
