@@ -39,12 +39,14 @@ export default withMermaid(
           items: [
             { text: "Configuration", link: "/backend/configuration" },
             { text: "Sync Endpoint", link: "/backend/sync-endpoint" },
-            { text: "Results Endpoint", link: "/backend/results-endpoint" }
+            { text: "Results Endpoint", link: "/backend/results-endpoint" },
+            { text: "Match Admission State Endpoint", link: "/backend/match-admission-state-endpoint" }
           ]
         },
         {
           text: "Releases",
           items: [
+            { text: "Nexori 2.3.0", link: "/releases/2.3.0" },
             { text: "Nexori 2.2.0", link: "/releases/2.2.0" }
           ]
         },

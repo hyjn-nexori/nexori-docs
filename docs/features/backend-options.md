@@ -31,9 +31,16 @@ Use this when you want your own service to own decisions like:
 
 Nexori syncs state to your backend with `POST /nexori/sync`, and your backend returns assignments in Nexori's expected format.
 
+For backend-driven backfill, Nexori can also report running match admission visibility through `POST /nexori/matches/state`.
+
 ## Result Reporting
 
 Result reporting is separate from matchmaking sync.
 
 When enabled, Nexori sends completed match results to `POST /nexori/results`. For third-party rules mods, the mod decides the final result through the Public API and can pass custom minigame data at final submit time.
 
+## Admission Visibility Reporting
+
+Admission visibility reporting is separate from both matchmaking sync and final result reporting.
+
+When enabled, Nexori sends backend-driven match admission state to `POST /nexori/matches/state`. This lets your backend keep an open-match registry, understand when a running match is still visible for backfill, and stop using matches that have closed, expired, or gone stale.

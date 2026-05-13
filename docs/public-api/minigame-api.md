@@ -5,7 +5,7 @@ The Nexori Minigame API is the supported integration surface for gameplay and ru
 Use it when your mod owns the game rules while Nexori owns the infrastructure around the match: active match identity, launch context, placement readiness, local match completion, return-to-lobby, and optional backend result reporting.
 
 ::: tip Current recommended path
-For new rules mods, use `setPlayerOutcome(...)` during the match, then call `submitFinalMatchResult(...)` once the match is complete. Keep player return separate with `returnPlayerToLobby(...)`.
+For new rules mods, use `setPlayerOutcome(...)` during the match, optionally call `closeMatchAdmission(...)` when late joins should stop, then call `submitFinalMatchResult(...)` once the match is complete. Keep player return separate with `returnPlayerToLobby(...)`.
 :::
 
 ## Public Surface
@@ -99,4 +99,3 @@ The practical references are:
 
 - `nexori-minigame-template`: clean starter shape for a new Nexori-compatible minigame mod.
 - `nexori-public-api-demo`: working Mid Capture demo that uses the current API.
-

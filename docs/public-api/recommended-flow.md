@@ -15,10 +15,11 @@ flowchart TD
     J -- "No" --> K["Pre-game hold for arrived players"]
     J -- "Yes" --> L["Run minigame rules"]
     L --> M["Set player outcomes"]
-    M --> N["Build customData"]
-    N --> O["submitFinalMatchResult(...)"]
-    O --> P["Return selected players"]
-    O --> Q["Optional POST /nexori/results"]
+    M --> N["Optional closeMatchAdmission(...)"]
+    N --> O["Build customData"]
+    O --> P["submitFinalMatchResult(...)"]
+    P --> Q["Return selected players"]
+    P --> R["Optional POST /nexori/results"]
 ```
 
 ## 1. Detect The Active Match
@@ -161,7 +162,23 @@ customData.add("playerCaptureProgress", playerCaptureProgress);
 
 `customData` is intentionally flexible. Nexori validates size and JSON shape, stores it with the result, and sends it to the backend if reporting is enabled.
 
-## 8. Submit The Final Result
+## 8. Optionally Close Admission
+
+If the match is backend-driven and your game reaches a point where late joins should stop, explicitly close admission before the final result if needed.
+
+```java
+nexoriApi.closeMatchAdmission(
+    new NexoriCloseMatchAdmissionRequest(
+        matchId,
+        NexoriCloseMatchAdmissionReason.ROSTER_LOCKED,
+        "Teams are locked for the final phase."
+    )
+);
+```
+
+This is optional. Use it when the match should stop accepting backfill players before the natural policy window closes.
+
+## 9. Submit The Final Result
 
 Once every required player has an accumulated outcome, submit the final match result.
 
@@ -183,7 +200,7 @@ if (result.matchStatus() != NexoriMatchCompletionStatus.ACCEPTED
 
 `submitFinalMatchResult(...)` completes the match locally and optionally queues `/nexori/results`. Local completion does not depend on the backend being online.
 
-## 9. Return Players Separately
+## 10. Return Players Separately
 
 Final result submission does not move players. Return is a separate choice.
 

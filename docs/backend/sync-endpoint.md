@@ -54,7 +54,7 @@ Your backend should validate that the trace headers match the body so request lo
   "server": {
     "fingerprint": "server-fingerprint",
     "connectionAddress": "lobby.example.com:21918",
-    "role": "LOBBY",
+    "role": "SERVER",
     "region": "us-east"
   },
   "queues": [
@@ -148,7 +148,7 @@ Your backend should validate that the trace headers match the body so request lo
 | --- | --- | --- | --- | --- |
 | `fingerprint` | string | Yes | Nexori server identity | Server fingerprint for diagnostics and trust correlation. |
 | `connectionAddress` | string | Yes | Nexori local address service | Address this server advertises for travel, if known. |
-| `role` | string | Yes | Nexori lobby service | `LOBBY` when this server is the configured lobby, otherwise `MEMBER`. |
+| `role` | string | Yes | Nexori server identity | Current role marker sent by Nexori. In the current contract this value is `SERVER`. |
 | `region` | string | Yes | Nexori backend config | Manual routing hint configured by the operator. Can be blank. |
 
 ## `queues[]` Fields
@@ -239,7 +239,9 @@ Your backend must respond with JSON for any successful `2xx` sync response.
   "acknowledgedAssignmentAckIds": ["ack-001"],
   "assignments": [
     {
+      "assignmentType": "INITIAL_MATCH",
       "assignmentId": "assign-002",
+      "matchId": "backend-match-002",
       "externalMatchId": "backend-match-002",
       "type": "CREATE_MATCH",
       "queueId": "duel_sword",
@@ -247,7 +249,14 @@ Your backend must respond with JSON for any successful `2xx` sync response.
         "11111111-1111-1111-1111-111111111111",
         "22222222-2222-2222-2222-222222222222"
       ],
+      "expectedPlayerUuids": [
+        "11111111-1111-1111-1111-111111111111",
+        "22222222-2222-2222-2222-222222222222"
+      ],
       "arenaId": "duel_arena_01",
+      "players": [],
+      "reportingServerId": "",
+      "targetConnectionAddress": "",
       "modeId": "duel",
       "kitId": "sword",
       "ranked": true,
@@ -273,23 +282,40 @@ Your backend must respond with JSON for any successful `2xx` sync response.
 
 | Field | Type | Required | Owner/source | Description |
 | --- | --- | --- | --- | --- |
+| `assignmentType` | string enum | Yes | Backend | `INITIAL_MATCH` or `BACKFILL`. Legacy `CREATE_MATCH` responses can omit this only for initial-match behavior. |
 | `assignmentId` | string | Yes | Backend | Unique id for this assignment. Never reuse with different content. |
-| `externalMatchId` | string | Yes | Backend | Backend-owned match id. Nexori preserves this and includes it in result reports. |
-| `type` | string enum | Yes | Backend | Must be `CREATE_MATCH` in this release. Other values are rejected. |
+| `matchId` | string | Yes | Backend | Backend-owned shared match id. Required for modern backend-driven flow. |
+| `externalMatchId` | string | Yes | Backend | Backend-owned match id preserved by Nexori for reporting and reconciliation. In most modern backends this should match or align with `matchId`. |
+| `type` | string enum | Yes | Backend | `CREATE_MATCH` for `INITIAL_MATCH`. `JOIN_MATCH` or `BACKFILL` is accepted for `BACKFILL`. |
 | `queueId` | string | Yes | Backend, from request queue snapshot | Queue to launch from. Must exist and be `BACKEND_DRIVEN`. |
-| `playerUuids` | array of UUID string | Yes | Backend, from queue members | Players assigned to this match. Must be online, queued, unique, and not already in another active match. |
+| `playerUuids` | array of UUID string | Yes | Backend, from queue members | Players assigned to this instruction. For `BACKFILL`, this should align with `players[].playerUuid`. |
+| `expectedPlayerUuids` | array of UUID string | Yes | Backend | Initial roster model for `INITIAL_MATCH`. Use an empty array for `BACKFILL`. |
 | `arenaId` | string | Yes | Backend, from request arena snapshot | Arena Nexori should launch. Must exist and belong to the queue's `arenaIds`. |
+| `players` | array | Yes | Backend | Per-player backfill tickets. Required for `BACKFILL`; use an empty array for `INITIAL_MATCH`. |
+| `reportingServerId` | string | Yes | Backend | Arena/reporting server that owns the existing match for `BACKFILL`. Blank for `INITIAL_MATCH` if unused. |
+| `targetConnectionAddress` | string | Yes | Backend | Explicit arena-server travel address for `BACKFILL`. Blank for `INITIAL_MATCH` if unused. |
 | `modeId` | string | Yes | Backend | Optional backend/gameplay hint. Nexori transports it as assignment metadata but does not own your matchmaking algorithm. Use blank string if unused. |
 | `kitId` | string | Yes | Backend | Optional backend/gameplay hint. Use blank string if unused. |
 | `ranked` | boolean | Yes | Backend | Whether your backend considers this assignment ranked. |
 | `metadata` | object | Yes | Backend | Backend-owned JSON object. Nexori does not interpret mode-specific matchmaking metadata. |
+
+## `players[]` Fields
+
+| Field | Type | Required | Owner/source | Description |
+| --- | --- | --- | --- | --- |
+| `playerUuid` | string UUID | Yes | Backend | Player being admitted through backfill. |
+| `admissionReservationId` | string | Yes | Backend reservation system | One reservation id per player and per slot. |
+| `admissionExpiresAtEpochMs` | integer | Yes | Backend reservation system | Expiration deadline for that player's admission ticket. |
 
 ## Assignment Validation In Nexori
 
 Nexori validates every assignment before launching:
 
 - `assignmentId` must not have been processed before with different content
-- `type` must be `CREATE_MATCH`
+- `assignmentType` must be `INITIAL_MATCH` or `BACKFILL`
+- `INITIAL_MATCH` must use `CREATE_MATCH`
+- `BACKFILL` must use `JOIN_MATCH`, `BACKFILL`, or leave `type` compatible with backfill handling
+- `matchId` must be a valid backend-owned match id
 - `queueId` must exist
 - queue must be `BACKEND_DRIVEN`
 - every player must be online
@@ -300,6 +326,9 @@ Nexori validates every assignment before launching:
 - `playerUuids.length` must be less than or equal to `arena.maxSupportedPlayers`
 - players must not already be in another active match
 - destination travel data must be parseable by Nexori
+- `BACKFILL` must include `targetConnectionAddress`
+- `BACKFILL` must include one `admissionReservationId` and one positive `admissionExpiresAtEpochMs` per player
+- `INITIAL_MATCH` player set must be a subset of `expectedPlayerUuids` when `expectedPlayerUuids` is provided
 
 If validation or launch fails, Nexori creates an assignment ACK with `REJECTED` or `FAILED`.
 
@@ -360,7 +389,7 @@ For sync, non-success responses do not permanently stop future heartbeats. Nexor
 3. Backend sees not enough players and returns no assignments.
 4. Player B enters the same queue.
 5. Nexori sends the next `/nexori/sync` with both players.
-6. Backend chooses an arena and returns one `CREATE_MATCH` assignment.
+6. Backend chooses an arena and returns one `INITIAL_MATCH` assignment.
 7. Nexori validates the assignment.
 8. Nexori launches the match and records an ACK:
    - `status="LAUNCHED"`
@@ -368,3 +397,20 @@ For sync, non-success responses do not permanently stop future heartbeats. Nexor
 9. Nexori includes that ACK in later `assignmentAcks`.
 10. Backend stores the ACK and returns its `ackId` in `acknowledgedAssignmentAckIds`.
 11. Nexori removes the ACK from its pending ACK store.
+
+## Backfill Flow
+
+For real backfill:
+
+1. A backend-driven match is already running on an arena server.
+2. Nexori reports its admission visibility through `/nexori/matches/state`.
+3. Another player joins the same synced queue from the same or another lobby server.
+4. The backend chooses the existing match instead of creating a new one.
+5. The backend returns a `BACKFILL` assignment with:
+   - `assignmentType="BACKFILL"`
+   - `matchId`
+   - `externalMatchId`
+   - `reportingServerId`
+   - `targetConnectionAddress`
+   - one `players[]` ticket per player
+6. Nexori validates the ticket, launches travel to the owning arena server, and attempts to admit the player into the existing match runtime.

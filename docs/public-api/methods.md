@@ -419,6 +419,89 @@ Result:
 
 `submitFinalMatchResult(...)` does not return players to lobby. Use `returnPlayerToLobby(...)` separately.
 
+## Admission Control
+
+### `closeMatchAdmission`
+
+```java
+NexoriCloseMatchAdmissionResult closeMatchAdmission(
+    NexoriCloseMatchAdmissionRequest request
+)
+```
+
+Request:
+
+```java
+public record NexoriCloseMatchAdmissionRequest(
+    String matchId,
+    NexoriCloseMatchAdmissionReason reason,
+    @Nullable String message
+) {
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `matchId` | Active Nexori match id to close for future backend admission. |
+| `reason` | Why the rules mod is closing admission. |
+| `message` | Optional human-readable detail for logs/debugging. |
+
+Closes backend admission reporting for one active backend-driven match.
+
+Call this when your game reaches a point where late joins should stop even if the configured backfill window has not expired yet.
+
+Examples:
+
+- the playable roster is now locked
+- the round started and late joins would be unfair
+- the game entered a boss/objective phase that should not accept new players
+- an admin wants to force closure manually
+
+```java
+NexoriCloseMatchAdmissionResult result = nexoriApi.closeMatchAdmission(
+    new NexoriCloseMatchAdmissionRequest(
+        matchId,
+        NexoriCloseMatchAdmissionReason.GAME_PHASE_LOCKED,
+        "Capture phase has started."
+    )
+);
+
+if (result.status() != NexoriCloseMatchAdmissionStatus.CLOSED
+    && result.status() != NexoriCloseMatchAdmissionStatus.ALREADY_CLOSED) {
+    logger.atWarning().log("Could not close admission: " + result.message());
+}
+```
+
+`closeMatchAdmission(...)` does not:
+
+- complete the match
+- return players to lobby
+- reopen later
+- change admission capacity
+- bypass ownership or backend-driven validation
+
+It marks admission closed locally and, when match admission reporting is enabled, Nexori sends a closed snapshot through `/nexori/matches/state`.
+
+Reasons:
+
+| Value | Meaning |
+| --- | --- |
+| `MOD_REQUEST` | General rules-mod initiated close. |
+| `GAME_PHASE_LOCKED` | Gameplay reached a phase where late joins should stop. |
+| `ROSTER_LOCKED` | Team/roster lock means no more players should enter. |
+| `ADMIN_FORCED` | Operator/admin forced the close. |
+
+Status values:
+
+| Value | Meaning |
+| --- | --- |
+| `CLOSED` | Admission was closed locally. |
+| `ALREADY_CLOSED` | Match admission was already closed locally. |
+| `MATCH_MISSING` | Match does not exist. |
+| `MATCH_NOT_BACKEND_DRIVEN` | Match is active but not a backend-driven match. |
+| `INVALID_REASON` | Request reason was invalid or missing. |
+| `REPORTING_DISABLED` | Admission was closed locally, but backend reporting was disabled or unusable so the backend may not have been notified. |
+
 ### Custom Data Limits
 
 `customData` is owned by the rules mod. Nexori validates it and forwards it to `/nexori/results` when reporting is enabled.

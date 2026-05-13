@@ -58,6 +58,10 @@ Your backend should validate that trace headers match the body so request logs, 
   "localMatchId": "nexori-match-001",
   "externalMatchId": "backend-match-001",
   "assignmentId": "assign-001",
+  "assignmentIdsByPlayerUuid": {
+    "11111111-1111-1111-1111-111111111111": "assign-na-001",
+    "22222222-2222-2222-2222-222222222222": "assign-eu-001"
+  },
   "queueId": "capture_zone_queue",
   "arenaId": "capture_zone_arena",
   "rulesEngineId": "capture_the_zone",
@@ -101,9 +105,10 @@ Your backend should validate that trace headers match the body so request logs, 
 | `resultId` | string | Yes | Nexori result store | Idempotency key for this result report. Also sent in `X-Nexori-Result-Id`. |
 | `sentAtEpochMs` | integer | Yes | Nexori result reporting service | Time this HTTP attempt was created, in Unix epoch milliseconds. |
 | `serverId` | string | Yes | Nexori server identity | Server id of the arena server sending the result. |
-| `localMatchId` | string | Yes | Nexori match runtime | Nexori-owned local match id. |
-| `externalMatchId` | string | Yes | Backend assignment | Backend-owned match id from the original assignment. Required for result reporting. |
-| `assignmentId` | string | Yes | Backend assignment | Backend-owned assignment id, if this match came from backend-driven matchmaking. Can be blank for non-assignment flows. |
+| `localMatchId` | string | Yes | Nexori match runtime | Nexori-owned local/runtime match id. Together with `externalMatchId`, this is the real match identity for backend reconciliation. |
+| `externalMatchId` | string | Yes | Backend assignment | Backend-owned match id from the original assignment. Required for result reporting. Together with `localMatchId`, this is the real match identity for backend reconciliation. |
+| `assignmentId` | string | Yes | Backend assignment | Legacy/best-effort assignment id. In multi-lobby flows this may reflect only one contributing lobby assignment, so it should not be treated as the sole identity of the match. Can be blank for non-assignment flows. |
+| `assignmentIdsByPlayerUuid` | object | No | Nexori launch metadata | Optional map of `playerUuid -> assignmentId` showing which assignment launched each player in multi-lobby flows. |
 | `queueId` | string | Yes | Nexori match runtime | Queue that launched the match. |
 | `arenaId` | string | Yes | Nexori match runtime | Arena/game where the match ran. |
 | `rulesEngineId` | string | Yes | Nexori arena/game config | Rules engine id that controlled the match. Blank if none was configured. |
@@ -120,6 +125,18 @@ Your backend should validate that trace headers match the body so request logs, 
 | `playerUuid` | string UUID | Yes | Nexori match runtime | Player UUID. |
 | `outcome` | string enum | Yes | Rules mod or Nexori resolution flow | `WIN`, `LOSS`, or `DISCONNECTED`. |
 | `reason` | string | Yes | Rules mod or Nexori resolution flow | Per-player reason, such as `fell_into_void`, `zone_captured`, or `disconnect`. |
+
+## Assignment Identity Notes
+
+In single-lobby backend-driven matches, `assignmentId` is usually enough as a convenient trace field.
+
+In multi-lobby matches, there may be one assignment per contributing lobby or per instruction. In that case:
+
+- `localMatchId` + `externalMatchId` is the real match identity
+- `assignmentId` is legacy/best-effort
+- `assignmentIdsByPlayerUuid` tells your backend which assignment launched each player when that metadata is available
+
+`assignmentIdsByPlayerUuid` is launch metadata, not competitive result data.
 
 ## Outcome Values
 
