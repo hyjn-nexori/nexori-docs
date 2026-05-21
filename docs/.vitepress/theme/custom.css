@@ -1,6 +1,29 @@
+:root {
+  --vp-layout-max-width: 1680px;
+}
+
 .vp-doc table {
   table-layout: fixed;
   width: 100%;
+}
+
+@media (min-width: 1280px) {
+  .VPDoc.has-aside .content-container {
+    max-width: 1080px;
+  }
+
+  .VPDoc.has-aside .content {
+    padding-right: 24px;
+  }
+
+  .VPSidebar {
+    padding-left: 20px;
+    width: 300px;
+  }
+
+  .VPContent.has-sidebar {
+    padding-left: 300px;
+  }
 }
 
 .vp-doc th,
@@ -12,8 +35,33 @@
   vertical-align: top;
 }
 
+.vp-doc th:first-child,
+.vp-doc td:first-child {
+  width: 260px;
+}
+
 .vp-doc th code,
 .vp-doc td code {
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.vp-doc td:first-child code {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.vp-doc .mermaid svg {
+  overflow: visible;
+}
+
+.vp-doc .mermaid foreignObject {
+  overflow: visible;
+}
+
+.vp-doc .mermaid .nodeLabel {
+  display: inline-block;
+  line-height: 1.45;
+  padding: 3px 0 5px;
 }

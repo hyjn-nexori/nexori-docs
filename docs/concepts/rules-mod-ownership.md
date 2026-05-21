@@ -18,24 +18,28 @@ This boundary is intentional. A sword duel, a bed game, a capture mode, and a to
 
 A rules mod should only run its match logic when the active match is assigned to that rules mod.
 
-Use `rulesEngineId` to check ownership. In the recommended setup, Manual games require a non-blank `rulesEngineId` in the Games UI, and built-in resolver games keep `rulesEngineId` blank. That means a rules mod can stay simple: if the active match's `rulesEngineId` matches the mod's id, it may control the match; otherwise it should stay passive.
+Use `rulesEngineId` at the integration boundary. It is the routing key that tells Nexori which rules/gameplay mod should control a match.
+
+Manual games require a non-blank `rulesEngineId` in the Games UI, and built-in resolver games keep `rulesEngineId` blank. A minigame adapter registers a lifecycle listener for its id, then translates those callbacks into local minigame sessions.
+
+Pick an id that is unique enough to avoid collisions with other mods on the same arena server. If your minigame is distributed to other server owners, document the id publicly so operators can use it when configuring Nexori games, queues, portals, and destinations.
 
 ```mermaid
 flowchart TD
-    A["Player tick or gameplay event"] --> B["findActiveMatchId(playerUuid)"]
-    B --> C{"Active Nexori match?"}
-    C -- "No" --> D["Ignore"]
-    C -- "Yes" --> E["findActiveMatchInfo(matchId)"]
-    E --> F{"rulesEngineId matches this mod?"}
-    F -- "No" --> G["Stay passive"]
-    F -- "Yes" --> H["Rules mod may own gameplay"]
+    A["Adapter registers<br/>rulesEngineId"] --> B["Nexori dispatches<br/>matching events"]
+    B --> C["Adapter creates or<br/>updates session"]
+    C --> D{"Local session<br/>ready?"}
+    D -- "No" --> E["Core stays passive"]
+    D -- "Yes" --> F["Core runs rules<br/>from local state"]
 ```
+
+Direct hard-dependency mods can use match queries such as `findActiveMatchId(...)` and `findActiveMatchInfo(...)`. Optional adapters can use lifecycle callbacks and local session state.
 
 ## Placement Handoff
 
 Reaching the destination server is not the same thing as being ready for gameplay.
 
-Nexori may still need to prepare the instance world, assign spawn slots, place players, and finish arrival validation. Use `findMatchPlacementState(matchId)` and wait until `placementComplete` is `true` before starting world-sensitive gameplay logic.
+Nexori may still need to prepare the instance world, assign spawn slots, place players, and finish arrival validation. Use `onMatchPlacementCompleted` as the clean callback handoff before starting world-sensitive gameplay logic. Direct integrations can still query `findMatchPlacementState(matchId)`.
 
 ### Why Placement Completion Matters
 
@@ -63,7 +67,7 @@ Your mod can hit race-condition-style problems if it starts acting on players to
 
 In Nexori's flow, the destination server first resolves a safe default-world natural spawn target. Nexori then prepares the match instance world. If explicit spawn slots exist for that instance, Nexori configures those assignments before the player enters the instance. After arrival, Nexori still tracks whether each player has completed the initial placement phase and only then counts that player as placed.
 
-That is why `findMatchPlacementState(matchId)` is important: it gives your mod a clean handoff point. When `placementComplete` becomes `true`, Nexori has finished its initial arrival-and-placement work for that match. This also covers the case where there are no explicit spawn slots and the flow settles using the instance's natural/default spawn behavior.
+That is why `onMatchPlacementCompleted` is important: it gives your mod a clean handoff point. When Nexori emits it, Nexori has finished its initial arrival-and-placement work for that match. This also covers the case where there are no explicit spawn slots and the flow settles using the instance's natural/default spawn behavior.
 
 Good candidates for the placement handoff:
 
@@ -83,13 +87,13 @@ If several minigame mods run on the same arena server, each mod should isolate i
 
 Recommended shape:
 
-1. Detect the active Nexori match for the player.
-2. Confirm the match's `rulesEngineId` matches this rules mod.
-3. Wait for placement completion.
+1. Register a lifecycle listener for the adapter's `rulesEngineId`.
+2. Translate callbacks into local session changes.
+3. Wait for `onMatchPlacementCompleted`.
 4. Keep match state keyed by `matchId`.
 5. Submit one complete result when the match ends.
 
-The important rule is that inactive minigame systems should stay passive. A capture-mode mod should not process a duel match, and a duel mod should not process a capture match. Blank `rulesEngineId` means no external rules mod owns that match in the recommended flow.
+The important rule is that inactive minigame systems should stay passive. A capture-mode mod should not process a duel match, and a duel mod should not process a capture match. For the gameplay core, active means a local session exists; passive means no local session exists.
 
 ## Result Authority
 

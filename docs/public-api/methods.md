@@ -2,7 +2,216 @@
 
 This page documents the public methods on `NexoriMinigameApi`. Each method is intentionally narrow: query match state, set player state, return a player, or submit the final result.
 
+## Lifecycle Callbacks
+
+Lifecycle callbacks let third-party minigame adapters react to Nexori-owned match transitions.
+
+Use callbacks when your adapter should react to match creation, player arrival, placement, completion, and runtime cleanup. Keep callback handling inside your integration layer. The minigame core should receive neutral session calls or private minigame events, not Nexori API objects.
+
+### `registerMatchLifecycleListener`
+
+```java
+NexoriListenerRegistration registerMatchLifecycleListener(
+    String rulesEngineId,
+    NexoriMatchLifecycleListener listener
+)
+```
+
+| Argument | Meaning |
+| --- | --- |
+| `rulesEngineId` | Rules engine id this listener owns. |
+| `listener` | Callback object that receives lifecycle events for that rules engine. |
+
+Registers a listener for Nexori match lifecycle events.
+
+Use this in an integration/adapter class, not in the gameplay core. Nexori filters callbacks by `rulesEngineId`, so one arena server can host several rules mods without every mod receiving every match.
+
+```java
+NexoriListenerRegistration registration =
+    nexoriApi.registerMatchLifecycleListener(
+        "capture_the_zone",
+        new NexoriMatchLifecycleListener() {
+            @Override
+            public void onPlayerArrived(NexoriPlayerMatchLifecycleEvent event) {
+                minigameService.addPlayerToSession(
+                    event.match().matchId(),
+                    event.playerUuid(),
+                    event.playerName(),
+                    event.eventAtEpochMs()
+                );
+            }
+        }
+    );
+```
+
+Close the registration during integration shutdown:
+
+```java
+registration.close();
+```
+
+### `NexoriListenerRegistration`
+
+```java
+public interface NexoriListenerRegistration extends AutoCloseable {
+    @Override
+    void close();
+}
+```
+
+The registration handle unregisters the listener.
+
+Call `close()` when the adapter shuts down, when your plugin unloads, or when you replace the listener. `close()` is designed to be idempotent.
+
+### `NexoriMatchLifecycleListener`
+
+```java
+public interface NexoriMatchLifecycleListener {
+    default void onMatchCreated(NexoriMatchLifecycleEvent event) {}
+    default void onPlayerArrived(NexoriPlayerMatchLifecycleEvent event) {}
+    default void onPlayerPlacementConfirmed(NexoriPlayerPlacementLifecycleEvent event) {}
+    default void onMatchPlacementCompleted(NexoriMatchLifecycleEvent event) {}
+    default void onMatchCompleted(NexoriMatchLifecycleEvent event) {}
+    default void onMatchRuntimeClosed(NexoriMatchLifecycleEvent event) {}
+}
+```
+
+Each method has a default no-op implementation. Override only the callbacks your adapter needs.
+
+| Callback | Meaning and adapter action |
+| --- | --- |
+| `onMatchCreated` | Match-level. Nexori created/orchestrated the local match runtime. Create or attach the minigame's local session/room. Do not start gameplay from this callback. |
+| `onPlayerArrived` | Player-level. Nexori associated a player with the match after arrival on the arena server. Add that player to the minigame's local session. Do not start gameplay from this callback. |
+| `onPlayerPlacementConfirmed` | Player-level. One player's initial placement reached a terminal placement outcome. Update individual ready/debug/HUD state if useful. Do not start gameplay from this callback; it is per-player. |
+| `onMatchPlacementCompleted` | Match-level. The required initial placement set is complete. Mark the local session ready and unlock/start gameplay from this callback. |
+| `onMatchCompleted` | Match-level. Nexori accepted or recorded local match completion. Usually no-op, log, or mark local state completed. Avoid submitting results from this callback. |
+| `onMatchRuntimeClosed` | Match-level. Nexori removed/closed the local runtime. Clean up the minigame's local session memory. Do not start gameplay from this callback. |
+
+Your minigame core should not call Nexori directly from these callbacks. The adapter should translate callbacks into neutral service methods such as `createSession(...)`, `addPlayer(...)`, `markPlacementComplete(...)`, or `closeSession(...)`.
+
+`onPlayerArrived` is not the same as a raw Hytale connect event. It means Nexori knows the match id, queue id, arena id, rules engine id, and player association.
+
+`onPlayerPlacementConfirmed` is individual per player. Do not start the match from it. Use `onMatchPlacementCompleted` to unlock position-sensitive gameplay.
+
+`onMatchCompleted` usually arrives after your adapter has already called `submitFinalMatchResult(...)` and Nexori accepted or recorded completion. Treat it as confirmation/observation, not as a result-submission hook.
+
+### `NexoriMatchLifecycleEvent`
+
+```java
+public record NexoriMatchLifecycleEvent(
+    String matchId,
+    String queueId,
+    String arenaId,
+    String assignmentId,
+    String externalMatchId,
+    String rulesEngineId,
+    String matchResolutionTriggerId,
+    List<UUID> expectedPlayerUuids,
+    List<UUID> arrivedPlayerUuids,
+    List<UUID> activePlayerUuids,
+    List<UUID> spectatorPlayerUuids,
+    List<UUID> requiredResultPlayerUuids,
+    NexoriMatchPlacementState placementState,
+    String reason,
+    long createdAtEpochMs,
+    long eventAtEpochMs
+)
+```
+
+Immutable public snapshot for a match-level lifecycle event.
+
+| Field | Meaning |
+| --- | --- |
+| `matchId` | Local Nexori match id. |
+| `queueId` | Queue that launched or owns the match. |
+| `arenaId` | Arena/game id. |
+| `assignmentId` | Backend assignment id, when available. |
+| `externalMatchId` | Backend-owned match id, when available. |
+| `rulesEngineId` | Rules mod id that should control the match. |
+| `matchResolutionTriggerId` | Resolution trigger configured for the arena. |
+| `expectedPlayerUuids` | Players expected by launch context. |
+| `arrivedPlayerUuids` | Players that reached the arena runtime. |
+| `activePlayerUuids` | Players still active in the match runtime. |
+| `spectatorPlayerUuids` | Players marked as logical spectators. |
+| `requiredResultPlayerUuids` | Players that must have an outcome before final submit. |
+| `placementState` | Current placement snapshot for the match. |
+| `reason` | Nexori lifecycle reason for the event. |
+| `createdAtEpochMs` | Match creation time. |
+| `eventAtEpochMs` | Event emission time. |
+
+Lists are immutable snapshots. Do not mutate or store them as your only runtime state; copy the data you need into your own session model.
+
+### `NexoriPlayerMatchLifecycleEvent`
+
+```java
+public record NexoriPlayerMatchLifecycleEvent(
+    NexoriMatchLifecycleEvent match,
+    UUID playerUuid,
+    String playerName,
+    String playerAssignmentId,
+    String reason,
+    long eventAtEpochMs
+)
+```
+
+Immutable public snapshot for a player-scoped match lifecycle event.
+
+| Field | Meaning |
+| --- | --- |
+| `match` | Match-level lifecycle snapshot. |
+| `playerUuid` | Player UUID for this event. |
+| `playerName` | Current player name when known. |
+| `playerAssignmentId` | Backend/player assignment id when available. |
+| `reason` | Nexori lifecycle reason for the player event. |
+| `eventAtEpochMs` | Event emission time. |
+
+Use this for player association events such as `onPlayerArrived`.
+
+### `NexoriPlayerPlacementLifecycleEvent`
+
+```java
+public record NexoriPlayerPlacementLifecycleEvent(
+    NexoriPlayerMatchLifecycleEvent player,
+    NexoriPlayerPlacementOutcome placementOutcome,
+    NexoriMatchPlacementState placementState,
+    String worldName,
+    String instanceTemplateId,
+    long eventAtEpochMs
+)
+```
+
+Immutable public snapshot for an individual player's initial placement lifecycle.
+
+| Field | Meaning |
+| --- | --- |
+| `player` | Player-scoped lifecycle snapshot. |
+| `placementOutcome` | Terminal placement outcome for this player. |
+| `placementState` | Match placement snapshot at this point. |
+| `worldName` | World name involved in placement when known. |
+| `instanceTemplateId` | Instance template id involved in placement when known. |
+| `eventAtEpochMs` | Event emission time. |
+
+Use this for individual ready/debug/HUD state. Do not use it to start gameplay for the whole match.
+
+### `NexoriPlayerPlacementOutcome`
+
+```java
+public enum NexoriPlayerPlacementOutcome {
+    CONFIRMED,
+    FALLBACK
+}
+```
+
+| Value | Meaning |
+| --- | --- |
+| `CONFIRMED` | Nexori confirmed the player's initial placement. |
+| `FALLBACK` | Nexori reached a terminal fallback placement path for that player. |
+
+Both values are terminal for the individual player placement event. The match as a whole should still wait for `onMatchPlacementCompleted`.
+
 ## Match Lookup
+
+The methods in this section are direct/simple queries. Use them for commands, diagnostics, admin tools, or integrations that intentionally call `NexoriMinigameApi` directly. Optional adapters should use lifecycle callbacks to populate their local session model.
 
 ### `findActiveMatchId`
 
@@ -16,7 +225,7 @@ Optional<String> findActiveMatchId(UUID playerUuid)
 
 Returns the active Nexori match id for the player, or `Optional.empty()` if the player is not currently in an active Nexori match.
 
-Call this as the first gate before your tick/event logic touches a player.
+Use this when you need to look up a player's active match from a command, admin tool, diagnostic flow, or direct integration.
 
 ```java
 Optional<String> activeMatchId = nexoriApi.findActiveMatchId(playerUuid);
@@ -62,7 +271,7 @@ Optional<NexoriActiveMatchInfo> findActiveMatchInfo(String matchId)
 
 Returns the public runtime snapshot for the match.
 
-Call this when creating or refreshing your own match runtime.
+Use this when a direct integration, command, or diagnostic tool needs a full active match snapshot.
 
 ```java
 NexoriActiveMatchInfo info = nexoriApi.findActiveMatchInfo(matchId).orElse(null);
@@ -84,8 +293,8 @@ if (!"capture_the_zone".equals(info.rulesEngineId())) {
 | `arenaId` | Arena/game id. |
 | `assignmentId` | Backend assignment id, when available. |
 | `externalMatchId` | Backend-owned match id, when available. |
-| `rulesEngineId` | Rules mod id that should control the match. Non-blank means rules-mod ownership in the recommended flow. |
-| `matchResolutionTriggerId` | Resolution trigger configured for the arena. Useful for diagnostics and legacy/advanced flows. |
+| `rulesEngineId` | Rules mod id that should control the match. |
+| `matchResolutionTriggerId` | Resolution trigger configured for the arena. Useful for diagnostics and advanced flows. |
 | `expectedPlayerUuids` | Players expected by launch context. |
 | `arrivedPlayerUuids` | Players that reached the arena runtime. |
 | `activePlayerUuids` | Players still active in the match runtime. |
@@ -109,7 +318,7 @@ Optional<String> findRulesEngineId(String matchId)
 
 Returns the rules engine id for the match.
 
-Call this if you only need ownership and do not need the full `NexoriActiveMatchInfo` snapshot. In the recommended setup, this is the main ownership gate for a rules mod.
+Call this if you only need ownership and do not need the full `NexoriActiveMatchInfo` snapshot.
 
 ```java
 boolean ownedByThisMod = nexoriApi.findRulesEngineId(matchId)
@@ -129,7 +338,7 @@ Optional<String> findMatchResolutionTriggerId(String matchId)
 
 Returns the active match resolution trigger id. `none` or blank means manual/custom resolution.
 
-Most rules mods should not need this for normal ownership checks. Use `rulesEngineId` instead. This method is useful for diagnostics, admin tools, legacy integrations, or advanced flows that need to show which arena resolver is configured.
+Most rules mods should not need this for normal ownership checks. Use `rulesEngineId` instead. This method is useful for diagnostics, admin tools, or advanced flows that need to show which arena resolver is configured.
 
 ```java
 String triggerId = nexoriApi.findMatchResolutionTriggerId(matchId).orElse("");
@@ -148,7 +357,7 @@ Optional<NexoriMatchPlacementState> findMatchPlacementState(String matchId)
 
 Returns Nexori's initial placement snapshot.
 
-Call this before enabling position-sensitive gameplay.
+Use this in direct integrations when you need the current placement snapshot. Modern callback adapters should prefer `onMatchPlacementCompleted`.
 
 ```java
 NexoriMatchPlacementState placement = nexoriApi.findMatchPlacementState(matchId).orElse(null);
@@ -519,32 +728,13 @@ Status values:
 
 Nexori rejects invalid custom data instead of silently truncating it.
 
-## Legacy Methods
+## Current Result Methods
 
-### `submitMatchResult`
+Nexori's public result API is intentionally explicit.
 
-```java
-@Deprecated
-NexoriSubmitMatchResultResult submitMatchResult(NexoriSubmitMatchResultRequest request)
-```
+Use these result methods:
 
-Legacy complete-result method that receives the player outcome list inside the request.
-
-Existing mods may continue to use it. New mods should prefer `setPlayerOutcome(...)` plus `submitFinalMatchResult(...)`.
-
-### `resolvePlayerOutcome`
-
-```java
-@Deprecated
-NexoriResolvePlayerResult resolvePlayerOutcome(
-    String matchId,
-    UUID playerUuid,
-    NexoriPlayerResolutionOutcome outcome,
-    int returnDelaySeconds,
-    String reason
-)
-```
-
-Legacy per-player method that sets one outcome and schedules that player's return.
-
-Existing mods may continue to use it. New mods should keep outcome and return separate with `setPlayerOutcome(...)` and `returnPlayerToLobby(...)`.
+1. `setPlayerOutcome(...)`
+2. `setPlayerSpectator(...)` when needed
+3. `submitFinalMatchResult(...)`
+4. `returnPlayerToLobby(...)` when players should leave the arena

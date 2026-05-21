@@ -46,6 +46,7 @@ export default withMermaid(
         {
           text: "Releases",
           items: [
+            { text: "Nexori 2.4.0", link: "/releases/2.4.0" },
             { text: "Nexori 2.3.0", link: "/releases/2.3.0" },
             { text: "Nexori 2.2.0", link: "/releases/2.2.0" }
           ]
@@ -54,6 +55,7 @@ export default withMermaid(
           text: "Public API",
           items: [
             { text: "Minigame API", link: "/public-api/minigame-api" },
+            { text: "Integrating Third-Party Minigames", link: "/public-api/integrating-third-party-minigames" },
             { text: "Methods", link: "/public-api/methods" },
             { text: "Recommended Flow", link: "/public-api/recommended-flow" }
           ]

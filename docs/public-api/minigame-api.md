@@ -4,8 +4,8 @@ The Nexori Minigame API is the supported integration surface for gameplay and ru
 
 Use it when your mod owns the game rules while Nexori owns the infrastructure around the match: active match identity, launch context, placement readiness, local match completion, return-to-lobby, and optional backend result reporting.
 
-::: tip Current recommended path
-For new rules mods, use `setPlayerOutcome(...)` during the match, optionally call `closeMatchAdmission(...)` when late joins should stop, then call `submitFinalMatchResult(...)` once the match is complete. Keep player return separate with `returnPlayerToLobby(...)`.
+::: tip Integration shape
+Soft-dependent rules mods can use lifecycle callbacks to create/attach local sessions, publish private minigame events from the gameplay core, and translate those events to Nexori commands from a separate integration layer.
 :::
 
 ## Public Surface
@@ -28,8 +28,9 @@ Treat services outside the public API package as Nexori internals. Queue service
 
 | Page | Use it for |
 | --- | --- |
+| [Integrating Third-Party Minigames](/public-api/integrating-third-party-minigames) | Callbacks, private minigame events, optional adapter, and soft dependency. |
 | [Methods](/public-api/methods) | Method signatures, arguments, return types, short usage notes, and small snippets. |
-| [Recommended Flow](/public-api/recommended-flow) | How a minigame should detect ownership, wait for placement, run logic, submit results, and return players. |
+| [Recommended Flow](/public-api/recommended-flow) | Command/result flow and ownership gates for direct or adapter-based integrations. |
 | [Rules Mod Ownership](/concepts/rules-mod-ownership) | The deeper separation between Nexori, the rules mod, and the backend. |
 
 ## Integration Model
@@ -46,11 +47,21 @@ Nexori and the rules mod should divide responsibilities cleanly.
 
 ### Runtime Dependency
 
-Declare Nexori as a runtime plugin dependency in your `manifest.json`.
+If your minigame uses direct Nexori imports from the core, declare Nexori as a runtime plugin dependency in your `manifest.json`.
 
 ```json
 {
   "Dependencies": {
+    "Nexori:NexoriPlugin": "*"
+  }
+}
+```
+
+For optional integration, put Nexori in `OptionalDependencies` instead and load your adapter by reflection.
+
+```json
+{
+  "OptionalDependencies": {
     "Nexori:NexoriPlugin": "*"
   }
 }
@@ -61,15 +72,22 @@ Declare Nexori as a runtime plugin dependency in your `manifest.json`.
 Your mod also needs Nexori's public Java types at compile time. Use `compileOnly` so the server-provided Nexori plugin remains the runtime source.
 
 ```groovy
+repositories {
+    mavenCentral()
+    maven { url = uri("https://jitpack.io") }
+}
+
 dependencies {
     implementation(files("$hytaleHome/install/$patchline/package/game/latest/Server/HytaleServer.jar"))
-    compileOnly(files("/path/to/nexori-plugin.jar"))
+    compileOnly("com.github.hyjn-nexori:nexori-api:v2.4.0")
 }
 ```
 
+Developers compile against `nexori-api` v2.4.0 through JitPack. Server owners install the full `nexori-plugin.jar` from CurseForge. Do not install `nexori-api.jar` as a server mod, do not use `implementation`, and do not shade or bundle `nexori-api` inside your minigame jar. The installed Nexori plugin provides the API classes at runtime.
+
 ### Resolve The API
 
-Resolve the Nexori plugin once during setup, then pass `NexoriMinigameApi` into your gameplay services.
+In the direct dependency pattern, resolve the Nexori plugin once during setup, then pass `NexoriMinigameApi` into your gameplay services.
 
 ```java
 import com.hypixel.hytale.common.plugin.PluginIdentifier;
@@ -93,9 +111,11 @@ final class NexoriMinigameApiLocator {
 }
 ```
 
+In the optional pattern, keep this locator inside your Nexori adapter package. Your plugin entry point and gameplay core should not import Nexori classes.
+
 ## Companion Projects
 
 The practical references are:
 
-- `nexori-minigame-template`: clean starter shape for a new Nexori-compatible minigame mod.
-- `nexori-public-api-demo`: working Mid Capture demo that uses the current API.
+- `nexori-minigame-template`: clean starter shape for a soft-dependent Nexori-compatible minigame mod.
+- `nexori-capture-the-zone-minigame`: Capture The Zone demo that uses callbacks, private events, and an optional Nexori integration layer.

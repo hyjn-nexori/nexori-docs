@@ -20,7 +20,7 @@ hero:
       link: /backend/configuration
     - theme: alt
       text: Third-Party Minigame Mods
-      link: /public-api/minigame-api
+      link: /public-api/integrating-third-party-minigames
 
 features:
   - title: Standalone First
@@ -28,7 +28,7 @@ features:
   - title: Backend Driven
     details: Let your backend take over queue matchmaking when you need ELO, regions, tournaments, load balancing, or custom assignment logic.
   - title: Minigame Mod API
-    details: Third-party rules mods can plug into Nexori match state, player outcomes, return-to-lobby, and final result reporting.
+    details: Third-party rules mods can use lifecycle callbacks and a small adapter layer to stay independent from Nexori while still reporting results cleanly.
 ---
 
 <section class="nexori-mission">

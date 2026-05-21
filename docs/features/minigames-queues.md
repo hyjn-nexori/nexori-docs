@@ -31,12 +31,14 @@ Nexori can provide ready-to-use minigame infrastructure, but it also exposes a P
 
 A custom rules mod can:
 
-- detect the active Nexori match
+- listen for Nexori match lifecycle callbacks
 - verify `rulesEngineId`
-- wait for player placement
+- create or attach its own local game session
+- wait for match placement completion
 - set player outcomes
 - mark logical spectators
 - submit the final result
 - include custom minigame data for backend reporting
 - return selected players to lobby
 
+One clean shape is to keep gameplay code independent from Nexori and put Nexori-specific calls in a small adapter/integration class. The adapter owns the `rulesEngineId` registration; Nexori uses that id to route matches to the correct rules mod, and the core runs from local session state. See [Integrating Third-Party Minigames](/public-api/integrating-third-party-minigames).
