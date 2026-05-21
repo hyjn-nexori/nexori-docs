@@ -1,5 +1,5 @@
 :root {
-  --vp-layout-max-width: 1680px;
+  --vp-layout-max-width: 1760px;
 }
 
 .vp-doc table {
@@ -9,21 +9,33 @@
 
 @media (min-width: 1280px) {
   .VPDoc.has-aside .content-container {
-    max-width: 1080px;
+    max-width: 1020px;
   }
 
   .VPDoc.has-aside .content {
-    padding-right: 24px;
+    padding-right: 32px;
+  }
+
+  .VPDoc.has-aside .aside {
+    width: 320px;
+    padding-left: 28px;
   }
 
   .VPSidebar {
     padding-left: 20px;
-    width: 300px;
+    width: 280px;
   }
 
   .VPContent.has-sidebar {
-    padding-left: 300px;
+    padding-left: 280px;
   }
+}
+
+.VPDocAsideOutline .outline-link {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  line-height: 1.4;
 }
 
 .vp-doc th,

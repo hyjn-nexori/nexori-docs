@@ -311,5 +311,5 @@ When the minigame ends:
 
 Use these projects as references:
 
-- `nexori-minigame-template`: starter architecture for third-party minigames.
-- `nexori-capture-the-zone-minigame`: Capture The Zone, a working demo that can run with Nexori or in a small local mode without Nexori.
+- [`nexori-minigame-template`](https://github.com/hyjn-nexori/nexori-minigame-template): starter architecture for third-party minigames.
+- [`nexori-capture-the-zone-minigame`](https://github.com/hyjn-nexori/nexori-capture-the-zone-minigame): Capture The Zone, a working demo that can run with Nexori or in a small local mode without Nexori.
