@@ -95,8 +95,8 @@ flowchart TD
 
 This is the pattern used by:
 
-- `nexori-minigame-template`: the clean starter template for third-party mods.
-- `nexori-capture-the-zone-minigame`: the Capture The Zone functional demo.
+- [`nexori-minigame-template`](https://github.com/hyjn-nexori/nexori-minigame-template): the clean starter template for third-party mods.
+- [`nexori-capture-the-zone-minigame`](https://github.com/hyjn-nexori/nexori-capture-the-zone-minigame): the Capture The Zone functional demo.
 
 ## Rule Engine Id And Session Ownership
 
@@ -306,6 +306,37 @@ When the minigame ends:
 | Resubmitting results from `onMatchCompleted` | That creates loops or duplicate reports. |
 | Publishing private events while holding long locks | Optional integrations may call back into Nexori. Dispatch outside locks. |
 | Exposing your mutable runtime objects as events | Use immutable snapshots or records. |
+
+## Implementation References
+
+Use the template when you want a clean shape to copy and adapt. Use Capture The Zone when you want to see the same pattern inside a working minigame.
+
+### Template Reference
+
+The template is intentionally small and heavily commented:
+
+- [`NexoriMinigameTemplatePlugin`](https://github.com/hyjn-nexori/nexori-minigame-template/blob/plugin/src/main/java/io/github/hyjn/nexori/minigametemplate/NexoriMinigameTemplatePlugin.java): plugin entry point with optional integration loading by reflection.
+- [`TemplateNexoriIntegration`](https://github.com/hyjn-nexori/nexori-minigame-template/blob/plugin/src/main/java/io/github/hyjn/nexori/minigametemplate/nexori/TemplateNexoriIntegration.java): adapter that translates Nexori callbacks into local sessions and private events back into Nexori commands.
+- [`NexoriMinigameApiLocator`](https://github.com/hyjn-nexori/nexori-minigame-template/blob/plugin/src/main/java/io/github/hyjn/nexori/minigametemplate/nexori/NexoriMinigameApiLocator.java): resolves `NexoriMinigameApi` without importing the full Nexori plugin class.
+- [`TemplateEventBus`](https://github.com/hyjn-nexori/nexori-minigame-template/blob/plugin/src/main/java/io/github/hyjn/nexori/minigametemplate/runtime/TemplateEventBus.java): small private event bus for minigame-owned events.
+- [`TemplateListenerRegistration`](https://github.com/hyjn-nexori/nexori-minigame-template/blob/plugin/src/main/java/io/github/hyjn/nexori/minigametemplate/runtime/TemplateListenerRegistration.java): closeable listener handle.
+- [`TemplateMatchFinishedEvent`](https://github.com/hyjn-nexori/nexori-minigame-template/blob/plugin/src/main/java/io/github/hyjn/nexori/minigametemplate/runtime/events/TemplateMatchFinishedEvent.java): private event your rules engine publishes when the game has a winner.
+- [`TemplateMinigameService`](https://github.com/hyjn-nexori/nexori-minigame-template/blob/plugin/src/main/java/io/github/hyjn/nexori/minigametemplate/runtime/TemplateMinigameService.java): local session service with no Nexori imports.
+- [`TemplateRulesEngine`](https://github.com/hyjn-nexori/nexori-minigame-template/blob/plugin/src/main/java/io/github/hyjn/nexori/minigametemplate/TemplateRulesEngine.java): gameplay/rules placeholder that stays independent from Nexori.
+
+### Capture The Zone Reference
+
+Capture The Zone shows the same architecture in a functional minigame:
+
+- [`NexoriPublicApiDemoPlugin`](https://github.com/hyjn-nexori/nexori-capture-the-zone-minigame/blob/plugin/src/main/java/io/github/hyjn/nexoridemo/NexoriPublicApiDemoPlugin.java): plugin entry point that starts CTZ core first and loads the Nexori integration optionally.
+- [`CaptureTheZoneNexoriIntegration`](https://github.com/hyjn-nexori/nexori-capture-the-zone-minigame/blob/plugin/src/main/java/io/github/hyjn/nexoridemo/nexori/CaptureTheZoneNexoriIntegration.java): production-style adapter for Nexori callbacks, CTZ private events, result submission, spectator state, and return-to-lobby.
+- [`NexoriMinigameApiLocator`](https://github.com/hyjn-nexori/nexori-capture-the-zone-minigame/blob/plugin/src/main/java/io/github/hyjn/nexoridemo/nexori/NexoriMinigameApiLocator.java): reflection-safe API locator.
+- [`MidCaptureEventBus`](https://github.com/hyjn-nexori/nexori-capture-the-zone-minigame/blob/plugin/src/main/java/io/github/hyjn/nexoridemo/midcapture/MidCaptureEventBus.java): private CTZ event bus.
+- [`MidCaptureMatchFinishedEvent`](https://github.com/hyjn-nexori/nexori-capture-the-zone-minigame/blob/plugin/src/main/java/io/github/hyjn/nexoridemo/midcapture/events/MidCaptureMatchFinishedEvent.java): private gameplay event translated into Nexori outcomes and final result submission.
+- [`MidCapturePlayerBecameSpectatorEvent`](https://github.com/hyjn-nexori/nexori-capture-the-zone-minigame/blob/plugin/src/main/java/io/github/hyjn/nexoridemo/midcapture/events/MidCapturePlayerBecameSpectatorEvent.java): private gameplay event translated into `setPlayerSpectator(...)`.
+- [`MidCaptureMinigameService`](https://github.com/hyjn-nexori/nexori-capture-the-zone-minigame/blob/plugin/src/main/java/io/github/hyjn/nexoridemo/midcapture/MidCaptureMinigameService.java): local CTZ session service with neutral methods used by both Nexori integration and local mode.
+- [`MidCaptureRulesEngine`](https://github.com/hyjn-nexori/nexori-capture-the-zone-minigame/blob/plugin/src/main/java/io/github/hyjn/nexoridemo/midcapture/MidCaptureRulesEngine.java): CTZ gameplay rules that publish private events instead of calling Nexori directly.
+- [`MidCaptureStandaloneDriver`](https://github.com/hyjn-nexori/nexori-capture-the-zone-minigame/blob/plugin/src/main/java/io/github/hyjn/nexoridemo/midcapture/MidCaptureStandaloneDriver.java): small local driver that can create a CTZ session without Nexori.
 
 ## See The Implementations
 
