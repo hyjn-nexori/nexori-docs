@@ -6,6 +6,12 @@ It lets a backend observe the current server snapshot, inspect backend-driven qu
 
 This endpoint is only used for backend-driven matchmaking. Local FIFO queues do not need it.
 
+::: tip Recommended Multi-Server Setup
+In the recommended multi-server setup, this endpoint runs on lobby/queue servers. It exposes queued players and receives `INITIAL_MATCH` or `BACKFILL` assignments.
+
+Arena/minigame servers do not need `syncEnabled=true` just to support backfill. They should publish backfill visibility through [`POST /nexori/matches/state`](/backend/match-admission-state-endpoint).
+:::
+
 ## When Nexori Calls It
 
 Nexori calls this endpoint when:
@@ -15,7 +21,7 @@ Nexori calls this endpoint when:
 - the server process reaches its next `syncIntervalMs`
 - no previous sync request is still in flight
 
-One server process sends at most one sync request per configured interval. The interval is controlled by `syncIntervalMs`; for example, `10000` means the server attempts roughly one heartbeat every 10 seconds.
+One server process sends at most one sync request per configured interval. The interval is controlled by `syncIntervalMs`; for example, `1000` means the server attempts roughly one heartbeat every second.
 
 This is global per server process, not per player, queue, arena, portal, or entity tick.
 
@@ -31,7 +37,7 @@ X-Nexori-Sent-At-Epoch-Ms: <sentAtEpochMs>
 
 ## Required Headers
 
-| Header | Required | Owner/source | Description |
+| Header | Required | Source | Description |
 | --- | --- | --- | --- |
 | `Authorization` | Yes | Nexori config | Must be `Bearer <serverToken>`. Your backend should reject missing or invalid tokens. |
 | `Content-Type` | Yes | Nexori | Always `application/json`. |
@@ -95,7 +101,6 @@ Your backend should validate that the trace headers match the body so request lo
       "destinationConnectionAddress": "arena.example.com:21918",
       "destinationTargetId": "arena-server-01",
       "instanceTemplateId": "DuelTemplate",
-      "matchResolutionTriggerId": "none",
       "maxSupportedPlayers": 2,
       "enabled": true
     }
@@ -129,104 +134,105 @@ Your backend should validate that the trace headers match the body so request lo
 
 ## Request Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | Yes | Nexori | Payload schema version. Current value is `1`. |
-| `syncId` | string UUID | Yes | Nexori | Unique id for this sync attempt. Also sent in `X-Nexori-Sync-Id`. |
-| `sequence` | integer | Yes | Nexori | Monotonic sync sequence from Nexori's durable backend assignment store. Also sent in `X-Nexori-Sequence`. |
-| `sentAtEpochMs` | integer | Yes | Nexori | Time the request was created, in Unix epoch milliseconds. |
-| `serverId` | string UUID | Yes | Nexori server identity | Stable id for the server process sending the heartbeat. |
-| `server` | object | Yes | Nexori | Snapshot of the sending server. |
-| `queues` | array | Yes | Nexori queue runtime | All known queues and their runtime state when available. |
-| `arenas` | array | Yes | Nexori arena config | All known arenas/games available to launch. |
-| `activeMatches` | array | Yes | Nexori arena runtime | Active match snapshots currently known by this server. |
-| `assignmentAcks` | array | Yes | Nexori durable assignment store | Pending assignment ACKs Nexori wants your backend to acknowledge. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `schemaVersion` | integer / Yes | Nexori | Payload schema version. Current value is `1`. |
+| `syncId` | string UUID / Yes | Nexori | Unique id for this sync attempt. Also sent in `X-Nexori-Sync-Id`. |
+| `sequence` | integer / Yes | Nexori | Monotonic sync sequence from Nexori's durable backend assignment store. Also sent in `X-Nexori-Sequence`. |
+| `sentAtEpochMs` | integer / Yes | Nexori | Time the request was created, in Unix epoch milliseconds. |
+| `serverId` | string UUID / Yes | Nexori server identity | Stable id for the server process sending the heartbeat. |
+| `server` | object / Yes | Nexori | Snapshot of the sending server. |
+| `queues` | array / Yes | Nexori queue runtime | All known queues and their runtime state when available. |
+| `arenas` | array / Yes | Nexori arena config | All known arenas/games available to launch. |
+| `activeMatches` | array / Yes | Nexori arena runtime | Active match snapshots currently known by this server. |
+| `assignmentAcks` | array / Yes | Nexori durable assignment store | Pending assignment ACKs Nexori wants your backend to acknowledge. |
 
 ## `server` Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `fingerprint` | string | Yes | Nexori server identity | Server fingerprint for diagnostics and trust correlation. |
-| `connectionAddress` | string | Yes | Nexori local address service | Address this server advertises for travel, if known. |
-| `role` | string | Yes | Nexori server identity | Current role marker sent by Nexori. In the current contract this value is `SERVER`. |
-| `region` | string | Yes | Nexori backend config | Manual routing hint configured by the operator. Can be blank. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `fingerprint` | string / Yes | Nexori server identity | Server fingerprint for diagnostics and trust correlation. |
+| `connectionAddress` | string / Yes | Nexori local address service | Address this server advertises for travel, if known. |
+| `role` | string / Yes | Nexori server identity | Current role marker sent by Nexori. In the current contract this value is `SERVER`. |
+| `region` | string / Yes | Nexori backend config | Manual routing hint configured by the operator. Can be blank. |
 
 ## `queues[]` Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `queueId` | string | Yes | Nexori queue config | Stable queue id. Use this when returning assignments. |
-| `displayName` | string | Yes | Nexori queue config | Human-readable queue name. |
-| `minPlayers` | integer | Yes | Nexori queue config | Minimum players needed for a valid match. |
-| `maxPlayers` | integer | Yes | Nexori queue config | Maximum players allowed by this queue. |
-| `countdownSeconds` | integer | Yes | Nexori queue config | Local countdown value. Backend-driven queues do not rely on local countdown to decide assignment. |
-| `launchTravelProfileId` | string | Yes | Nexori queue config | Travel profile used by Nexori when launching. |
-| `matchmakingMode` | string | Yes | Nexori queue config | `LOCAL_FIFO` or `BACKEND_DRIVEN`. Your backend should only assign players from `BACKEND_DRIVEN` queues. |
-| `enabled` | boolean | Yes | Nexori queue config | Whether the queue is enabled. |
-| `arenaIds` | array of string | Yes | Nexori queue config | Arena ids this queue is allowed to launch into. Assignments must use one of these ids. |
-| `runtime` | object or null | Yes | Nexori queue runtime | Current queue state. May be `null` if the queue has no runtime state yet. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `queueId` | string / Yes | Nexori queue config | Stable queue id. Use this when returning assignments. |
+| `displayName` | string / Yes | Nexori queue config | Human-readable queue name. |
+| `minPlayers` | integer / Yes | Nexori queue config | Minimum players needed for a valid match. |
+| `maxPlayers` | integer / Yes | Nexori queue config | Maximum players allowed by this queue. |
+| `countdownSeconds` | integer / Yes | Nexori queue config | Local countdown value. Backend-driven queues do not rely on local countdown to decide assignment. |
+| `launchTravelProfileId` | string / Yes | Nexori queue config | Travel profile used by Nexori when launching. |
+| `matchmakingMode` | string / Yes | Nexori queue config | `LOCAL_FIFO` or `BACKEND_DRIVEN`. Your backend should only assign players from `BACKEND_DRIVEN` queues. |
+| `enabled` | boolean / Yes | Nexori queue config | Whether the queue is enabled. |
+| `arenaIds` | array of string / Yes | Nexori queue config | Arena ids this queue is allowed to launch into. Assignments must use one of these ids. |
+| `runtime` | object or null / Yes | Nexori queue runtime | Current queue state. May be `null` if the queue has no runtime state yet. |
 
 ## `runtime` Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `phase` | string | Yes | Nexori queue runtime | Current queue phase, such as `WAITING`, `READY`, or a launch-related phase. Treat as diagnostic unless your backend needs it. |
-| `countdownEndsAtEpochMs` | integer | Yes | Nexori queue runtime | Local countdown end time. Usually not used for backend-driven assignment decisions. |
-| `readyAtEpochMs` | integer | Yes | Nexori queue runtime | Time the queue became ready locally, if applicable. |
-| `lastStateChangeEpochMs` | integer | Yes | Nexori queue runtime | Last runtime state transition time. |
-| `lastLaunchAttemptAtEpochMs` | integer | Yes | Nexori queue runtime | Last local launch attempt time. |
-| `lastLaunchError` | string | Yes | Nexori queue runtime | Last launch error known to Nexori, if any. |
-| `waitingMembers` | array | Yes | Nexori queue runtime | Players currently waiting in the queue. Backend-driven matchmakers usually read from here. |
-| `readyMembers` | array | Yes | Nexori queue runtime | Players considered ready by runtime. Backend-driven matchmakers may include them depending on policy. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `phase` | string / Yes | Nexori queue runtime | Current queue phase, such as `WAITING`, `READY`, or a launch-related phase. Treat as diagnostic unless your backend needs it. |
+| `countdownEndsAtEpochMs` | integer / Yes | Nexori queue runtime | Local countdown end time. Usually not used for backend-driven assignment decisions. |
+| `readyAtEpochMs` | integer / Yes | Nexori queue runtime | Time the queue became ready locally, if applicable. |
+| `lastStateChangeEpochMs` | integer / Yes | Nexori queue runtime | Last runtime state transition time. |
+| `lastLaunchAttemptAtEpochMs` | integer / Yes | Nexori queue runtime | Last local launch attempt time. |
+| `lastLaunchError` | string / Yes | Nexori queue runtime | Last launch error known to Nexori, if any. |
+| `waitingMembers` | array / Yes | Nexori queue runtime | Players currently waiting in the queue. Backend-driven matchmakers usually read from here. |
+| `readyMembers` | array / Yes | Nexori queue runtime | Players considered ready by runtime. Backend-driven matchmakers may include them depending on policy. |
 
 ## `waitingMembers[]` And `readyMembers[]` Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `playerUuid` | string UUID | Yes | Nexori queue runtime | Player UUID to use in assignments. |
-| `playerNameSnapshot` | string | Yes | Nexori queue runtime | Last known player name snapshot. Do not use as identity. |
-| `sourceLobbyId` | string | Yes | Nexori queue/runtime source | Lobby id where the player joined, if known. |
-| `sourcePortalId` | string | Yes | Nexori queue/runtime source | Portal id used to join the queue, if known. |
-| `joinedAtEpochMs` | integer | Yes | Nexori queue runtime | Time the player joined the queue. Useful for FIFO or timeout logic. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `playerUuid` | string UUID / Yes | Nexori queue runtime | Player UUID to use in assignments. |
+| `playerNameSnapshot` | string / Yes | Nexori queue runtime | Last known player name snapshot. Do not use as identity. |
+| `sourceLobbyId` | string / Yes | Nexori queue/runtime source | Lobby id where the player joined, if known. |
+| `sourcePortalId` | string / Yes | Nexori queue/runtime source | Portal id used to join the queue, if known. |
+| `joinedAtEpochMs` | integer / Yes | Nexori queue runtime | Time the player joined the queue. Useful for FIFO or timeout logic. |
 
 ## `arenas[]` Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `arenaId` | string | Yes | Nexori arena config | Stable arena/game id. Assignments must reference an arena id known to Nexori. |
-| `displayName` | string | Yes | Nexori arena config | Human-readable arena name. |
-| `destinationConnectionAddress` | string | Yes | Nexori arena config | Destination server address Nexori will travel players to. |
-| `destinationTargetId` | string | Yes | Nexori arena config | Destination target id used by Nexori travel. |
-| `instanceTemplateId` | string | Yes | Nexori arena config | Instance template Nexori should create or materialize. |
-| `matchResolutionTriggerId` | string | Yes | Nexori arena config | Built-in trigger id or `none`/manual-style value for rules-mod controlled games. |
-| `maxSupportedPlayers` | integer | Yes | Nexori arena config | Maximum players supported by this arena. Assignments above this number are rejected. |
-| `enabled` | boolean | Yes | Nexori arena config | Whether this arena is enabled. Disabled arenas should not be assigned. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `arenaId` | string / Yes | Nexori arena config | Stable arena/game id. Assignments must reference an arena id known to Nexori. |
+| `displayName` | string / Yes | Nexori arena config | Human-readable arena name. |
+| `destinationConnectionAddress` | string / Yes | Nexori arena config | Destination server address Nexori will travel players to. |
+| `destinationTargetId` | string / Yes | Nexori arena config | Destination target id used by Nexori travel. |
+| `instanceTemplateId` | string / Yes | Nexori arena config | Instance template Nexori should create or materialize. |
+| `maxSupportedPlayers` | integer / Yes | Nexori arena config | Maximum players supported by this arena. Assignments above this number are rejected. |
+| `enabled` | boolean / Yes | Nexori arena config | Whether this arena is enabled. Disabled arenas should not be assigned. |
 
 ## `activeMatches[]` Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `matchId` | string | Yes | Nexori arena runtime | Local Nexori match id. |
-| `queueId` | string | Yes | Nexori arena runtime | Queue that launched the match. |
-| `arenaId` | string | Yes | Nexori arena runtime | Arena where the match is running. |
-| `expectedPlayerCount` | integer | Yes | Nexori arena runtime | Number of players expected by the match. |
-| `arrivedPlayerCount` | integer | Yes | Nexori arena runtime | Number of players that have reached the arena server runtime. |
-| `activePlayerCount` | integer | Yes | Nexori arena runtime | Number of players still considered active by Nexori. |
-| `createdAtEpochMs` | integer | Yes | Nexori arena runtime | Match creation time. |
-| `updatedAtEpochMs` | integer | Yes | Nexori arena runtime | Last match runtime update time. |
-| `lastError` | string | Yes | Nexori arena runtime | Last runtime error known to Nexori, if any. |
+`activeMatches[]` is a local snapshot for the server sending sync. Backends should not rely on lobby sync `activeMatches[]` as the main cross-server open-match registry. For cross-server backfill, use [`POST /nexori/matches/state`](/backend/match-admission-state-endpoint).
+
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `matchId` | string / Yes | Nexori arena runtime | Local Nexori match id. |
+| `queueId` | string / Yes | Nexori arena runtime | Queue that launched the match. |
+| `arenaId` | string / Yes | Nexori arena runtime | Arena where the match is running. |
+| `expectedPlayerCount` | integer / Yes | Nexori arena runtime | Number of players expected by the match. |
+| `arrivedPlayerCount` | integer / Yes | Nexori arena runtime | Number of players that have reached the arena server runtime. |
+| `activePlayerCount` | integer / Yes | Nexori arena runtime | Number of players still considered active by Nexori. |
+| `createdAtEpochMs` | integer / Yes | Nexori arena runtime | Match creation time. |
+| `updatedAtEpochMs` | integer / Yes | Nexori arena runtime | Last match runtime update time. |
+| `lastError` | string / Yes | Nexori arena runtime | Last runtime error known to Nexori, if any. |
 
 ## `assignmentAcks[]` Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `ackId` | string | Yes | Nexori durable assignment store | Unique ACK id. Return it in `acknowledgedAssignmentAckIds` once your backend has processed it. |
-| `assignmentId` | string | Yes | Backend assignment, persisted by Nexori | Original backend assignment id. |
-| `externalMatchId` | string | Yes | Backend assignment, persisted by Nexori | Backend-owned match id from the assignment. |
-| `status` | string enum | Yes | Nexori assignment execution | `LAUNCHED`, `REJECTED`, or `FAILED`. |
-| `localMatchId` | string | Yes | Nexori assignment execution | Nexori-owned local match id when launch succeeded. Blank for rejected/failed assignments. |
-| `reason` | string | Yes | Nexori assignment execution | Human-readable reason for rejection/failure, or blank on success. |
-| `createdAtEpochMs` | integer | Yes | Nexori durable assignment store | Time the ACK was created. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `ackId` | string / Yes | Nexori durable assignment store | Unique ACK id. Return it in `acknowledgedAssignmentAckIds` once your backend has processed it. |
+| `assignmentId` | string / Yes | Backend assignment, persisted by Nexori | Original backend assignment id. |
+| `externalMatchId` | string / Yes | Backend assignment, persisted by Nexori | Backend-owned match id from the assignment. |
+| `status` | string enum / Yes | Nexori assignment execution | `LAUNCHED`, `REJECTED`, or `FAILED`. |
+| `localMatchId` | string / Yes | Nexori assignment execution | Nexori-owned local match id when launch succeeded. Blank for rejected/failed assignments. |
+| `reason` | string / Yes | Nexori assignment execution | Human-readable reason for rejection/failure, or blank on success. |
+| `createdAtEpochMs` | integer / Yes | Nexori durable assignment store | Time the ACK was created. |
 
 ## Response Payload
 
@@ -271,41 +277,41 @@ Your backend must respond with JSON for any successful `2xx` sync response.
 
 ## Response Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | Yes | Backend | Response schema version. Use `1`. |
-| `receivedSequence` | integer | Yes | Backend | Echo the request `sequence` your backend processed. |
-| `acknowledgedAssignmentAckIds` | array of string | Yes | Backend | ACK ids from request `assignmentAcks` that your backend has processed and durably accepted. Nexori removes these from its pending ACK store. |
-| `assignments` | array | Yes | Backend | Assignments Nexori should attempt to launch. Use an empty array when no match should launch. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `schemaVersion` | integer / Yes | Backend | Response schema version. Use `1`. |
+| `receivedSequence` | integer / Yes | Backend | Echo the request `sequence` your backend processed. |
+| `acknowledgedAssignmentAckIds` | array of string / Yes | Backend | ACK ids from request `assignmentAcks` that your backend has processed and durably accepted. Nexori removes these from its pending ACK store. |
+| `assignments` | array / Yes | Backend | Assignments Nexori should attempt to launch. Use an empty array when no match should launch. |
 
 ## `assignments[]` Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `assignmentType` | string enum | Yes | Backend | `INITIAL_MATCH` or `BACKFILL`. Legacy `CREATE_MATCH` responses can omit this only for initial-match behavior. |
-| `assignmentId` | string | Yes | Backend | Unique id for this assignment. Never reuse with different content. |
-| `matchId` | string | Yes | Backend | Backend-owned shared match id. Required for modern backend-driven flow. |
-| `externalMatchId` | string | Yes | Backend | Backend-owned match id preserved by Nexori for reporting and reconciliation. In most modern backends this should match or align with `matchId`. |
-| `type` | string enum | Yes | Backend | `CREATE_MATCH` for `INITIAL_MATCH`. `JOIN_MATCH` or `BACKFILL` is accepted for `BACKFILL`. |
-| `queueId` | string | Yes | Backend, from request queue snapshot | Queue to launch from. Must exist and be `BACKEND_DRIVEN`. |
-| `playerUuids` | array of UUID string | Yes | Backend, from queue members | Players assigned to this instruction. For `BACKFILL`, this should align with `players[].playerUuid`. |
-| `expectedPlayerUuids` | array of UUID string | Yes | Backend | Initial roster model for `INITIAL_MATCH`. Use an empty array for `BACKFILL`. |
-| `arenaId` | string | Yes | Backend, from request arena snapshot | Arena Nexori should launch. Must exist and belong to the queue's `arenaIds`. |
-| `players` | array | Yes | Backend | Per-player backfill tickets. Required for `BACKFILL`; use an empty array for `INITIAL_MATCH`. |
-| `reportingServerId` | string | Yes | Backend | Arena/reporting server that owns the existing match for `BACKFILL`. Blank for `INITIAL_MATCH` if unused. |
-| `targetConnectionAddress` | string | Yes | Backend | Explicit arena-server travel address for `BACKFILL`. Blank for `INITIAL_MATCH` if unused. |
-| `modeId` | string | Yes | Backend | Optional backend/gameplay hint. Nexori transports it as assignment metadata but does not own your matchmaking algorithm. Use blank string if unused. |
-| `kitId` | string | Yes | Backend | Optional backend/gameplay hint. Use blank string if unused. |
-| `ranked` | boolean | Yes | Backend | Whether your backend considers this assignment ranked. |
-| `metadata` | object | Yes | Backend | Backend-owned JSON object. Nexori does not interpret mode-specific matchmaking metadata. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `assignmentType` | string enum / Yes | Backend | `INITIAL_MATCH` or `BACKFILL`. Legacy `CREATE_MATCH` responses can omit this only for initial-match behavior. |
+| `assignmentId` | string / Yes | Backend | Unique id for this assignment. Never reuse with different content. |
+| `matchId` | string / Yes | Backend | Backend-owned shared match id. Required for modern backend-driven flow. |
+| `externalMatchId` | string / Yes | Backend | Backend-owned match id preserved by Nexori for reporting and reconciliation. In most modern backends this should match or align with `matchId`. |
+| `type` | string enum / Yes | Backend | `CREATE_MATCH` for `INITIAL_MATCH`. `JOIN_MATCH` or `BACKFILL` is accepted for `BACKFILL`. |
+| `queueId` | string / Yes | Backend, from request queue snapshot | Queue to launch from. Must exist and be `BACKEND_DRIVEN`. |
+| `playerUuids` | array of UUID string / Yes | Backend, from queue members | Players assigned to this instruction. For `BACKFILL`, this should align with `players[].playerUuid`. |
+| `expectedPlayerUuids` | array of UUID string / Yes | Backend | Initial roster model for `INITIAL_MATCH`. Use an empty array for `BACKFILL`. |
+| `arenaId` | string / Yes | Backend, from request arena snapshot | Arena Nexori should launch. Must exist and belong to the queue's `arenaIds`. |
+| `players` | array / Yes | Backend | Per-player backfill tickets. Required for `BACKFILL`; use an empty array for `INITIAL_MATCH`. |
+| `reportingServerId` | string / Yes | Backend | Arena/reporting server that owns the existing match for `BACKFILL`. Blank for `INITIAL_MATCH` if unused. |
+| `targetConnectionAddress` | string / Yes | Backend | Explicit arena-server travel address for `BACKFILL`. Blank for `INITIAL_MATCH` if unused. |
+| `modeId` | string / Yes | Backend | Optional backend/gameplay hint. Nexori transports it as assignment metadata but does not own your matchmaking algorithm. Use blank string if unused. |
+| `kitId` | string / Yes | Backend | Optional backend/gameplay hint. Use blank string if unused. |
+| `ranked` | boolean / Yes | Backend | Whether your backend considers this assignment ranked. |
+| `metadata` | object / Yes | Backend | Backend-owned JSON object. Nexori does not interpret mode-specific matchmaking metadata. |
 
 ## `players[]` Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `playerUuid` | string UUID | Yes | Backend | Player being admitted through backfill. |
-| `admissionReservationId` | string | Yes | Backend reservation system | One reservation id per player and per slot. |
-| `admissionExpiresAtEpochMs` | integer | Yes | Backend reservation system | Expiration deadline for that player's admission ticket. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `playerUuid` | string UUID / Yes | Backend | Player being admitted through backfill. |
+| `admissionReservationId` | string / Yes | Backend reservation system | One reservation id per player and per slot. |
+| `admissionExpiresAtEpochMs` | integer / Yes | Backend reservation system | Expiration deadline for that player's admission ticket. |
 
 ## Assignment Validation In Nexori
 

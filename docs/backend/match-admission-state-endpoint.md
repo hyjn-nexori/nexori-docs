@@ -6,6 +6,10 @@ It is not a matchmaking heartbeat and it is not final result reporting. Nexori s
 
 This endpoint is used by backend-driven backfill. Local FIFO queues do not use it.
 
+::: tip Recommended Multi-Server Setup
+This endpoint is expected to run on the arena/minigame server that owns the active match. It exists so the backend can track open admission and backfill state without requiring that server to run `/nexori/sync`.
+:::
+
 ## When Nexori Calls It
 
 Nexori calls this endpoint when:
@@ -40,7 +44,7 @@ X-Nexori-Sent-At-Epoch-Ms: <sentAtEpochMs>
 
 ## Required Headers
 
-| Header | Required | Owner/source | Description |
+| Header | Required | Source | Description |
 | --- | --- | --- | --- |
 | `Authorization` | Yes | Nexori config | Must be `Bearer <serverToken>`. Your backend should reject missing or invalid tokens. |
 | `Content-Type` | Yes | Nexori | Always `application/json`. |
@@ -62,6 +66,7 @@ Your backend should validate that the trace headers match the body so logs, idem
   "sentAtEpochMs": 1760000000000,
   "stateExpiresAtEpochMs": 1760000030000,
   "reportingServerId": "25bdb01c-97f2-42d4-998a-4ef7b04d71c3",
+  "reportingServerConnectionAddress": "arena.example.com:21918",
   "matchId": "3bb28e1b-b83a-459a-ad13-1961acc7759b",
   "externalMatchId": "backend-match-001",
   "queueId": "capture_zone_queue",
@@ -92,36 +97,37 @@ Your backend should validate that the trace headers match the body so logs, idem
 
 ## Request Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | Yes | Nexori | Payload schema version. Current value is `1`. |
-| `stateUpdateId` | string UUID | Yes | Nexori admission reporting service | Idempotency and trace id for this snapshot attempt. Also sent in `X-Nexori-State-Update-Id`. |
-| `admissionStateSequence` | integer | Yes | Nexori admission reporting service | Monotonic sequence for this match publication stream. Also sent in `X-Nexori-Sequence`. |
-| `payloadHash` | string | Yes | Nexori admission reporting service | Canonical hash of the payload body. Useful for debugging, duplicate detection, and safety checks. |
-| `sentAtEpochMs` | integer | Yes | Nexori admission reporting service | Time this HTTP attempt was created, in Unix epoch milliseconds. |
-| `stateExpiresAtEpochMs` | integer | Yes | Nexori admission reporting service | Expiration time for this snapshot. Backends should ignore stale state once this point has passed. |
-| `reportingServerId` | string UUID | Yes | Nexori server identity | Arena/reporting server sending the snapshot. |
-| `matchId` | string | Yes | Nexori match runtime | Nexori-owned local/runtime match id. |
-| `externalMatchId` | string | Yes | Backend assignment | Backend-owned match id. This is the preferred stable match identity for backend reconciliation. |
-| `queueId` | string | Yes | Nexori match runtime | Queue that launched the match. |
-| `arenaId` | string | Yes | Nexori match runtime | Arena/game where the match is running. |
-| `backfillEnabled` | boolean | Yes | Nexori launch policy snapshot | Whether the launching queue enabled backfill/admission visibility. |
-| `backfillMode` | string enum | Yes | Nexori launch policy snapshot | `NONE`, `PLACEMENT_ONLY`, or `ACTIVE_WINDOW`. |
-| `backfillWindowSeconds` | integer | Yes | Nexori launch policy snapshot | Configured active-window duration in seconds. `0` for modes that do not use a window. |
-| `matchLifecycleStatus` | string enum | Yes | Nexori admission reporting service | Current lifecycle stage for admission reporting, currently `PLACEMENT` or `ACTIVE`. |
-| `admissionOpen` | boolean | Yes | Nexori admission reporting service | Whether the match is still open for new admission right now. |
-| `admissionOpenUntilEpochMs` | integer | Yes | Nexori admission reporting service | Deadline for admission visibility, when applicable. `0` means no explicit wall-clock deadline is attached to this snapshot. |
-| `admissionCapacity` | integer | Yes | Nexori launch policy snapshot | Total admission capacity frozen onto the match at launch. |
-| `admittedSlotCount` | integer | Yes | Nexori admission reporting service | Total slots already consumed by the initial roster plus consumed backfill admissions, clamped to capacity. |
-| `availableAdmissionSlots` | integer | Yes | Nexori admission reporting service | Remaining visible slots before backend-side reservation filtering. |
-| `initialRosterSize` | integer | Yes | Nexori launch context | Size of the original expected roster. Backfill does not rewrite this number. |
-| `arrivedInitialPlayerCount` | integer | Yes | Nexori match runtime | How many initial-roster players actually arrived. Backfill players are not counted here. |
-| `unfilledInitialRosterCount` | integer | Yes | Nexori admission reporting service | Remaining initial-roster arrivals not yet placed/arrived. Diagnostic only; do not use it for capacity or priority decisions. |
-| `consumedAdmissionReservationIds` | array of string | Yes | Nexori admission reporting service | Reservation ids that Nexori considers consumed by accepted backfill arrivals in this specific snapshot. |
-| `admissionReportingClosed` | boolean | Yes | Nexori admission reporting service | Whether Nexori considers admission reporting closed for this match. |
-| `admissionReportingCloseReason` | string | Yes | Nexori admission reporting service | Close reason id when reporting is closed, otherwise blank. |
-| `primaryChangeReason` | string | Yes | Nexori admission reporting service | Main reason this snapshot was emitted. |
-| `coalescedChangeReasons` | array of string | Yes | Nexori admission reporting service | Additional reasons merged into this snapshot during debounce/coalescing. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `schemaVersion` | integer / Yes | Nexori | Payload schema version. Current value is `1`. |
+| `stateUpdateId` | string UUID / Yes | Nexori admission reporting service | Idempotency and trace id for this snapshot attempt. Also sent in `X-Nexori-State-Update-Id`. |
+| `admissionStateSequence` | integer / Yes | Nexori admission reporting service | Monotonic sequence for this match publication stream. Also sent in `X-Nexori-Sequence`. |
+| `payloadHash` | string / Yes | Nexori admission reporting service | Canonical hash over stable admission snapshot fields. Useful for debugging, duplicate detection, and safety checks. |
+| `sentAtEpochMs` | integer / Yes | Nexori admission reporting service | Time this HTTP attempt was created, in Unix epoch milliseconds. |
+| `stateExpiresAtEpochMs` | integer / Yes | Nexori admission reporting service | Expiration time for this snapshot. Backends should ignore stale state once this point has passed. |
+| `reportingServerId` | string UUID / Yes | Nexori server identity | Arena/reporting server sending the snapshot. |
+| `reportingServerConnectionAddress` | string / Yes | Nexori arena/reporting server | Connection address of the server that owns the match. Backend should store it with the open-match record and can later use it as `targetConnectionAddress` in a `BACKFILL` assignment when a lobby sync exposes a queued player. May be blank if unknown. |
+| `matchId` | string / Yes | Nexori match runtime | Nexori-owned local/runtime match id. |
+| `externalMatchId` | string / Yes | Backend assignment | Backend-owned match id. This is the preferred stable match identity for backend reconciliation. |
+| `queueId` | string / Yes | Nexori match runtime | Queue that launched the match. |
+| `arenaId` | string / Yes | Nexori match runtime | Arena/game where the match is running. |
+| `backfillEnabled` | boolean / Yes | Nexori launch policy snapshot | Whether the launching queue enabled backfill/admission visibility. |
+| `backfillMode` | string enum / Yes | Nexori launch policy snapshot | `NONE`, `PLACEMENT_ONLY`, or `ACTIVE_WINDOW`. |
+| `backfillWindowSeconds` | integer / Yes | Nexori launch policy snapshot | Configured active-window duration in seconds. `0` for modes that do not use a window. |
+| `matchLifecycleStatus` | string enum / Yes | Nexori admission reporting service | Current lifecycle stage for admission reporting, currently `PLACEMENT` or `ACTIVE`. |
+| `admissionOpen` | boolean / Yes | Nexori admission reporting service | Whether the match is still open for new admission right now. |
+| `admissionOpenUntilEpochMs` | integer / Yes | Nexori admission reporting service | Deadline for admission visibility, when applicable. `0` means no explicit wall-clock deadline is attached to this snapshot. |
+| `admissionCapacity` | integer / Yes | Nexori launch policy snapshot | Total admission capacity frozen onto the match at launch. |
+| `admittedSlotCount` | integer / Yes | Nexori admission reporting service | Total slots already consumed by the initial roster plus consumed backfill admissions, clamped to capacity. |
+| `availableAdmissionSlots` | integer / Yes | Nexori admission reporting service | Remaining visible slots before backend-side reservation filtering. |
+| `initialRosterSize` | integer / Yes | Nexori launch context | Size of the original expected roster. Backfill does not rewrite this number. |
+| `arrivedInitialPlayerCount` | integer / Yes | Nexori match runtime | How many initial-roster players actually arrived. Backfill players are not counted here. |
+| `unfilledInitialRosterCount` | integer / Yes | Nexori admission reporting service | Remaining initial-roster arrivals not yet placed/arrived. Diagnostic only; do not use it for capacity or priority decisions. |
+| `consumedAdmissionReservationIds` | array of string / Yes | Nexori admission reporting service | Reservation ids that Nexori considers consumed by accepted backfill arrivals in this specific snapshot. |
+| `admissionReportingClosed` | boolean / Yes | Nexori admission reporting service | Whether Nexori considers admission reporting closed for this match. |
+| `admissionReportingCloseReason` | string / Yes | Nexori admission reporting service | Close reason id when reporting is closed, otherwise blank. |
+| `primaryChangeReason` | string / Yes | Nexori admission reporting service | Main reason this snapshot was emitted. |
+| `coalescedChangeReasons` | array of string / Yes | Nexori admission reporting service | Additional reasons merged into this snapshot during debounce/coalescing. |
 
 ## Backfill Policy Fields
 
@@ -187,12 +193,12 @@ Your backend must return JSON for any successful `2xx` admission-state response 
 
 ## Response Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | Yes | Backend | Response schema version. Use `1`. |
-| `receivedStateUpdateId` | string | Yes | Backend | Must equal request `stateUpdateId`. Nexori uses this to confirm the backend acknowledged the intended snapshot. |
-| `receivedAdmissionStateSequence` | integer | Yes | Backend | Should equal request `admissionStateSequence`. Useful for trace/debug parity. |
-| `status` | string enum | Yes | Backend | Recommended values are `ACCEPTED`, `DUPLICATE`, or `STALE`. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `schemaVersion` | integer / Yes | Backend | Response schema version. Use `1`. |
+| `receivedStateUpdateId` | string / Yes | Backend | Must equal request `stateUpdateId`. Nexori uses this to confirm the backend acknowledged the intended snapshot. |
+| `receivedAdmissionStateSequence` | integer / Yes | Backend | Should equal request `admissionStateSequence`. Useful for trace/debug parity. |
+| `status` | string enum / Yes | Backend | Recommended values are `ACCEPTED`, `DUPLICATE`, or `STALE`. |
 
 ## Response Status Values
 
@@ -304,19 +310,21 @@ This is why reservation tracking belongs on the backend side even though Nexori 
 ## Example Flow
 
 1. A backend-driven match is launched with backfill enabled.
-2. Nexori reports an open admission snapshot during placement.
-3. The backend keeps that match in its open-match registry.
+2. The arena/minigame server reports an open admission snapshot during placement.
+3. The backend keeps that match and its `reportingServerConnectionAddress` in its open-match registry.
 4. A later player joins the same synced queue from another lobby.
-5. The backend chooses the existing match and returns a `BACKFILL` assignment through `/nexori/sync`.
-6. Nexori validates the backfill ticket and the player arrives.
-7. Nexori reports a new `/nexori/matches/state` snapshot with:
+5. A lobby/queue server sends `/nexori/sync` with that queued player.
+6. The backend chooses the existing arena match and returns a `BACKFILL` assignment through `/nexori/sync` to the lobby/queue server.
+7. The backend uses the stored arena `reportingServerConnectionAddress` as the assignment `targetConnectionAddress`.
+8. Nexori validates the backfill ticket and the player arrives on the arena/minigame server.
+9. The arena/minigame server reports a new `/nexori/matches/state` snapshot with:
    - updated `admittedSlotCount`
    - updated `availableAdmissionSlots`
    - `consumedAdmissionReservationIds` containing that player's reservation id
-8. Backend accepts the snapshot and marks that reservation consumed.
-9. Later, the window expires or a rules mod explicitly closes admission.
-10. Nexori sends one final closed snapshot with:
+10. Backend accepts the snapshot and marks that reservation consumed.
+11. Later, the window expires or a rules mod explicitly closes admission.
+12. Nexori sends one final closed snapshot with:
     - `admissionOpen=false`
     - `availableAdmissionSlots=0`
     - `admissionReportingClosed=true`
-11. Backend removes the match from future backfill eligibility.
+13. Backend removes the match from future backfill eligibility.

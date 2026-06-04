@@ -397,7 +397,7 @@ if (requirements == null) {
 }
 
 for (UUID playerUuid : requirements.requiredPlayerUuids()) {
-    // Make sure each player has an accumulated WIN, LOSS, or DISCONNECTED outcome.
+    // Make sure each player has an accumulated WIN, LOSS, DISCONNECTED, or NO_CONTEST outcome.
 }
 ```
 
@@ -425,7 +425,7 @@ NexoriSetPlayerOutcomeResult setPlayerOutcome(
 | --- | --- |
 | `matchId` | Active Nexori match id. |
 | `playerUuid` | Player receiving the outcome. |
-| `outcome` | `WIN`, `LOSS`, or `DISCONNECTED`. |
+| `outcome` | `WIN`, `LOSS`, `DISCONNECTED`, or `NO_CONTEST`. |
 | `reason` | Short player-level reason. |
 
 Stores or replaces one player's accumulated outcome inside the active match runtime.
@@ -452,6 +452,7 @@ Notes:
 | Repeated calls before completion | The latest outcome replaces the previous one. |
 | `WIN` | Does not mark the player eliminated. |
 | `LOSS` or `DISCONNECTED` | Marks the player eliminated. |
+| `NO_CONTEST` | Does not mark the player eliminated. Intended for match-cancel or no-contest outcomes. |
 | Completed match | Returns `MATCH_ALREADY_COMPLETED`. |
 | Return-to-lobby | Not triggered by this method. |
 | Backend reporting | Not triggered by this method. |
@@ -614,7 +615,7 @@ Nexori validates:
 | Match not already finalized | Same payload is idempotent; different payload is a duplicate conflict. |
 | Completeness | Every required player must have an accumulated outcome. |
 | Unknown outcomes | Outcomes for players outside the match are rejected. |
-| Winner | V1 requires at least one `WIN`. |
+| Winner | Requires at least one `WIN` unless all required players are `NO_CONTEST`. |
 | Custom data | Must be a valid JSON object within limits. |
 
 Result:

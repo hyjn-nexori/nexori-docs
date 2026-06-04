@@ -13,9 +13,6 @@ hero:
       text: Download
       link: https://www.curseforge.com/hytale/mods/nexori
     - theme: alt
-      text: Nexori Features
-      link: /features/overview
-    - theme: alt
       text: Backend Integration
       link: /backend/configuration
     - theme: alt

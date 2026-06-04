@@ -31,7 +31,6 @@ Treat services outside the public API package as Nexori internals. Queue service
 | [Integrating Third-Party Minigames](/public-api/integrating-third-party-minigames) | Callbacks, private minigame events, optional adapter, and soft dependency. |
 | [Methods](/public-api/methods) | Method signatures, arguments, return types, short usage notes, and small snippets. |
 | [Recommended Flow](/public-api/recommended-flow) | Command/result flow and ownership gates for direct or adapter-based integrations. |
-| [Rules Mod Ownership](/concepts/rules-mod-ownership) | The deeper separation between Nexori, the rules mod, and the backend. |
 
 ## Integration Model
 

@@ -143,7 +143,7 @@ nexoriApi.setPlayerOutcome(
 );
 ```
 
-The last outcome before final submit wins. `LOSS` and `DISCONNECTED` mark the player eliminated in Nexori runtime, but they do not return the player to lobby.
+The last outcome before final submit wins. `LOSS` and `DISCONNECTED` mark the player eliminated in Nexori runtime, while `NO_CONTEST` can be used for no-contest or cancelled outcomes without marking elimination. Outcomes do not return the player to lobby.
 
 ## 7. Use Logical Spectator State When Needed
 

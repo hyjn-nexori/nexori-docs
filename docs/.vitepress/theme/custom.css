@@ -3,8 +3,17 @@
 }
 
 .vp-doc table {
-  table-layout: fixed;
+  display: block;
+  min-width: 0;
   width: 100%;
+  max-width: none;
+  overflow-x: auto;
+  table-layout: auto;
+}
+
+.vp-doc table thead,
+.vp-doc table tbody {
+  min-width: 760px;
 }
 
 @media (min-width: 1280px) {
@@ -40,22 +49,53 @@
 
 .vp-doc th,
 .vp-doc td {
-  min-width: 0;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
   word-break: normal;
   vertical-align: top;
 }
 
-.vp-doc th:first-child,
-.vp-doc td:first-child {
-  width: 260px;
-}
-
 .vp-doc th code,
 .vp-doc td code {
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.vp-doc .endpoint-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin: 16px 0 24px;
+}
+
+.vp-doc .endpoint-card {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--vp-c-bg-soft);
+}
+
+.vp-doc .endpoint-card h3 {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+
+.vp-doc .endpoint-card dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.vp-doc .endpoint-card dt {
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.vp-doc .endpoint-card dd {
+  margin: -6px 0 0;
 }
 
 .vp-doc td:first-child code {

@@ -9,46 +9,19 @@ export default withMermaid(
     themeConfig: {
       logo: "/images/nexori-logo-transparent.png",
       nav: [
-        { text: "Nexori Features", link: "/features/overview" },
-        { text: "Concepts", link: "/concepts/backend-driven-matchmaking" },
-        { text: "Backend", link: "/backend/configuration" },
+        { text: "Backend", link: "/backend/overview" },
         { text: "Public API", link: "/public-api/minigame-api" },
         { text: "Download", link: "https://www.curseforge.com/hytale/mods/nexori" }
       ],
       sidebar: [
         {
-          text: "Nexori Features",
-          items: [
-            { text: "Overview", link: "/features/overview" },
-            { text: "Server Layouts", link: "/features/server-layouts" },
-            { text: "Portals And Travel", link: "/features/portals-travel" },
-            { text: "Minigames And Queues", link: "/features/minigames-queues" },
-            { text: "Backend Options", link: "/features/backend-options" }
-          ]
-        },
-        {
-          text: "Concepts",
-          items: [
-            { text: "Backend-Driven Matchmaking", link: "/concepts/backend-driven-matchmaking" },
-            { text: "Result Reporting", link: "/concepts/result-reporting" },
-            { text: "Rules Mod Ownership", link: "/concepts/rules-mod-ownership" }
-          ]
-        },
-        {
           text: "Backend Integration",
           items: [
+            { text: "Overview", link: "/backend/overview" },
             { text: "Configuration", link: "/backend/configuration" },
             { text: "Sync Endpoint", link: "/backend/sync-endpoint" },
             { text: "Results Endpoint", link: "/backend/results-endpoint" },
             { text: "Match Admission State Endpoint", link: "/backend/match-admission-state-endpoint" }
-          ]
-        },
-        {
-          text: "Releases",
-          items: [
-            { text: "Nexori 2.4.0", link: "/releases/2.4.0" },
-            { text: "Nexori 2.3.0", link: "/releases/2.3.0" },
-            { text: "Nexori 2.2.0", link: "/releases/2.2.0" }
           ]
         },
         {

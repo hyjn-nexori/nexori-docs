@@ -37,7 +37,7 @@ X-Nexori-Sent-At-Epoch-Ms: <sentAtEpochMs>
 
 ## Required Headers
 
-| Header | Required | Owner/source | Description |
+| Header | Required | Source | Description |
 | --- | --- | --- | --- |
 | `Authorization` | Yes | Nexori config | Must be `Bearer <serverToken>`. Your backend should reject missing or invalid tokens. |
 | `Content-Type` | Yes | Nexori | Always `application/json`. |
@@ -99,32 +99,32 @@ Your backend should validate that trace headers match the body so request logs, 
 
 ## Request Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | Yes | Nexori | Payload schema version. Current value is `1`. |
-| `resultId` | string | Yes | Nexori result store | Idempotency key for this result report. Also sent in `X-Nexori-Result-Id`. |
-| `sentAtEpochMs` | integer | Yes | Nexori result reporting service | Time this HTTP attempt was created, in Unix epoch milliseconds. |
-| `serverId` | string | Yes | Nexori server identity | Server id of the arena server sending the result. |
-| `localMatchId` | string | Yes | Nexori match runtime | Nexori-owned local/runtime match id. Together with `externalMatchId`, this is the real match identity for backend reconciliation. |
-| `externalMatchId` | string | Yes | Backend assignment | Backend-owned match id from the original assignment. Required for result reporting. Together with `localMatchId`, this is the real match identity for backend reconciliation. |
-| `assignmentId` | string | Yes | Backend assignment | Legacy/best-effort assignment id. In multi-lobby flows this may reflect only one contributing lobby assignment, so it should not be treated as the sole identity of the match. Can be blank for non-assignment flows. |
-| `assignmentIdsByPlayerUuid` | object | No | Nexori launch metadata | Optional map of `playerUuid -> assignmentId` showing which assignment launched each player in multi-lobby flows. |
-| `queueId` | string | Yes | Nexori match runtime | Queue that launched the match. |
-| `arenaId` | string | Yes | Nexori match runtime | Arena/game where the match ran. |
-| `rulesEngineId` | string | Yes | Nexori arena/game config | Rules engine id that controlled the match. Blank if none was configured. |
-| `players` | array | Yes | Nexori match runtime and rules mod outcomes | Final player outcomes for required result players. |
-| `reason` | string | Yes | Rules mod or Nexori completion flow | General result reason, such as `rules_mod_completed` or `last_player_alive`. |
-| `metadata` | object | Yes | Nexori legacy result metadata | Legacy flat metadata map. Prefer `customData` for mode-specific stats. |
-| `customData` | object | Yes | Minigame/rules mod | Custom JSON data owned by the minigame mod. Nexori validates and forwards it but does not interpret it. |
-| `endedAtEpochMs` | integer | Yes | Nexori match runtime | Time the match was completed locally. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `schemaVersion` | integer / Yes | Nexori | Payload schema version. Current value is `1`. |
+| `resultId` | string / Yes | Nexori result store | Idempotency key for this result report. Also sent in `X-Nexori-Result-Id`. |
+| `sentAtEpochMs` | integer / Yes | Nexori result reporting service | Time this HTTP attempt was created, in Unix epoch milliseconds. |
+| `serverId` | string / Yes | Nexori server identity | Server id of the arena server sending the result. |
+| `localMatchId` | string / Yes | Nexori match runtime | Nexori-owned local/runtime match id. Together with `externalMatchId`, this is the real match identity for backend reconciliation. |
+| `externalMatchId` | string / Yes | Backend assignment | Backend-owned match id from the original assignment. Required for result reporting. Together with `localMatchId`, this is the real match identity for backend reconciliation. |
+| `assignmentId` | string / Yes | Backend assignment | Legacy/best-effort assignment id. In multi-lobby flows this may reflect only one contributing lobby assignment, so it should not be treated as the sole identity of the match. Can be blank for non-assignment flows. |
+| `assignmentIdsByPlayerUuid` | object / No | Nexori launch metadata | Optional map of `playerUuid -> assignmentId` showing which assignment launched each player in multi-lobby flows. |
+| `queueId` | string / Yes | Nexori match runtime | Queue that launched the match. |
+| `arenaId` | string / Yes | Nexori match runtime | Arena/game where the match ran. |
+| `rulesEngineId` | string / Yes | Nexori arena/game config | Rules engine id that controlled the match. Blank if none was configured. |
+| `players` | array / Yes | Nexori match runtime and rules mod outcomes | Final player outcomes for required result players. |
+| `reason` | string / Yes | Rules mod or Nexori completion flow | General result reason, such as `rules_mod_completed` or `last_player_alive`. |
+| `metadata` | object / Yes | Nexori legacy result metadata | Legacy flat metadata map. Prefer `customData` for mode-specific stats. |
+| `customData` | object / Yes | Minigame/rules mod | Custom JSON data owned by the minigame mod. Nexori validates and forwards it but does not interpret it. |
+| `endedAtEpochMs` | integer / Yes | Nexori match runtime | Time the match was completed locally. |
 
 ## `players[]` Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `playerUuid` | string UUID | Yes | Nexori match runtime | Player UUID. |
-| `outcome` | string enum | Yes | Rules mod or Nexori resolution flow | `WIN`, `LOSS`, or `DISCONNECTED`. |
-| `reason` | string | Yes | Rules mod or Nexori resolution flow | Per-player reason, such as `fell_into_void`, `zone_captured`, or `disconnect`. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `playerUuid` | string UUID / Yes | Nexori match runtime | Player UUID. |
+| `outcome` | string enum / Yes | Rules mod or Nexori resolution flow | `WIN`, `LOSS`, `DISCONNECTED`, or `NO_CONTEST`. |
+| `reason` | string / Yes | Rules mod or Nexori resolution flow | Per-player reason, such as `fell_into_void`, `zone_captured`, or `disconnect`. |
 
 ## Assignment Identity Notes
 
@@ -145,8 +145,11 @@ In multi-lobby matches, there may be one assignment per contributing lobby or pe
 | `WIN` | Player won the match or was part of the winning side. Multiple winners are allowed in the payload. |
 | `LOSS` | Player lost the match. |
 | `DISCONNECTED` | Player disconnected and the rules mod/Nexori completion flow reported that state. Backend can apply its own penalty policy. |
+| `NO_CONTEST` | Player was included in a cancelled or no-contest match result without being marked as a winner, loser, or disconnect. |
 
 `DRAW` is not part of this result contract yet.
+
+Normal final results require at least one `WIN`. A full no-contest result is valid when every required player has `NO_CONTEST`.
 
 ## Custom Data
 
@@ -155,6 +158,39 @@ In multi-lobby matches, there may be one assignment per contributing lobby or pe
 Nexori does not interpret custom stats such as damage, kills, assists, beds broken, flags captured, zone progress, chests looted, or any other mode-specific data.
 
 The backend can process `customData` however it wants. Different minigames may send different shapes.
+
+### `customData.nexoriAfk`
+
+The minigame owns `customData`, but Nexori reserves and may add `customData.nexoriAfk` for local AFK reporting when AFK snapshots are available. Minigame mods should avoid using this key for their own data.
+
+```json
+"nexoriAfk": {
+  "schemaVersion": 1,
+  "matchId": "nexori-match-001",
+  "playerFields": [
+    "playerUuid",
+    "playerName",
+    "currentlyAfk",
+    "totalAfkMs",
+    "afkCount",
+    "currentStartedAtEpochMs",
+    "lastIdleMs",
+    "sources"
+  ],
+  "players": [
+    [
+      "11111111-1111-1111-1111-111111111111",
+      "PlayerOne",
+      true,
+      15000,
+      1,
+      1760000045000,
+      5000,
+      ["IDLE_TIMEOUT"]
+    ]
+  ]
+}
+```
 
 Nexori validates custom data before storing and sending it:
 
@@ -185,11 +221,11 @@ Your backend must return JSON for a result report that Nexori should consider co
 
 ## Response Fields
 
-| Field | Type | Required | Owner/source | Description |
-| --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | Yes | Backend | Response schema version. Use `1`. |
-| `receivedResultId` | string | Yes | Backend | Must equal request `resultId`. Nexori uses this to confirm the backend acknowledged the intended result. |
-| `status` | string enum | Yes | Backend | `ACCEPTED` or `DUPLICATE`. |
+| Field | Type / Required | Source | Description |
+| --- | --- | --- | --- |
+| `schemaVersion` | integer / Yes | Backend | Response schema version. Use `1`. |
+| `receivedResultId` | string / Yes | Backend | Must equal request `resultId`. Nexori uses this to confirm the backend acknowledged the intended result. |
+| `status` | string enum / Yes | Backend | `ACCEPTED` or `DUPLICATE`. |
 
 ## Response Status Values
 
