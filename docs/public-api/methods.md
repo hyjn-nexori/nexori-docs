@@ -71,6 +71,8 @@ public interface NexoriMatchLifecycleListener {
     default void onPlayerArrived(NexoriPlayerMatchLifecycleEvent event) {}
     default void onPlayerPlacementConfirmed(NexoriPlayerPlacementLifecycleEvent event) {}
     default void onMatchPlacementCompleted(NexoriMatchLifecycleEvent event) {}
+    default void onMatchStartAllowed(NexoriMatchLifecycleEvent event) {}
+    default void onMatchCancellationRequested(NexoriMatchLifecycleEvent event) {}
     default void onMatchCompleted(NexoriMatchLifecycleEvent event) {}
     default void onMatchRuntimeClosed(NexoriMatchLifecycleEvent event) {}
 }
@@ -83,7 +85,9 @@ Each method has a default no-op implementation. Override only the callbacks your
 | `onMatchCreated` | Match-level. Nexori created/orchestrated the local match runtime. Create or attach the minigame's local session/room. Do not start gameplay from this callback. |
 | `onPlayerArrived` | Player-level. Nexori associated a player with the match after arrival on the arena server. Add that player to the minigame's local session. Do not start gameplay from this callback. |
 | `onPlayerPlacementConfirmed` | Player-level. One player's initial placement reached a terminal placement outcome. Update individual ready/debug/HUD state if useful. Do not start gameplay from this callback; it is per-player. |
-| `onMatchPlacementCompleted` | Match-level. The required initial placement set is complete. Mark the local session ready and unlock/start gameplay from this callback. |
+| `onMatchPlacementCompleted` | Match-level. All expected initial players were placed. Useful for readiness/debug state, but `onMatchStartAllowed` is the recommended gameplay unlock signal. |
+| `onMatchStartAllowed` | Match-level. Nexori opened the start gate. Unlock/start gameplay from this callback. It can happen after placement completes or after the initial placement window closes with `minimumInitialPlayers` satisfied. |
+| `onMatchCancellationRequested` | Match-level. Nexori initiated pre-game cancellation, such as initial placement window shortfall. Abort local setup, stop countdowns, hide HUDs, cancel timers, and clean local runtime state while Nexori handles cancellation/no-contest. |
 | `onMatchCompleted` | Match-level. Nexori accepted or recorded local match completion. Usually no-op, log, or mark local state completed. Avoid submitting results from this callback. |
 | `onMatchRuntimeClosed` | Match-level. Nexori removed/closed the local runtime. Clean up the minigame's local session memory. Do not start gameplay from this callback. |
 
@@ -91,7 +95,9 @@ Your minigame core should not call Nexori directly from these callbacks. The ada
 
 `onPlayerArrived` is not the same as a raw Hytale connect event. It means Nexori knows the match id, queue id, arena id, rules engine id, and player association.
 
-`onPlayerPlacementConfirmed` is individual per player. Do not start the match from it. Use `onMatchPlacementCompleted` to unlock position-sensitive gameplay.
+`onPlayerPlacementConfirmed` is individual per player. Do not start the match from it. Use `onMatchStartAllowed` to unlock position-sensitive gameplay.
+
+`onMatchPlacementCompleted` tells you every expected initial player was placed. `onMatchStartAllowed` is broader: it also covers partial-roster starts after the initial placement window closes and the configured minimum initial player count was met.
 
 `onMatchCompleted` usually arrives after your adapter has already called `submitFinalMatchResult(...)` and Nexori accepted or recorded completion. Treat it as confirmation/observation, not as a result-submission hook.
 
@@ -128,7 +134,7 @@ Immutable public snapshot for a match-level lifecycle event.
 | `assignmentId` | Backend assignment id, when available. |
 | `externalMatchId` | Backend-owned match id, when available. |
 | `rulesEngineId` | Rules mod id that should control the match. |
-| `matchResolutionTriggerId` | Resolution trigger configured for the arena. |
+| `matchResolutionTriggerId` | Deprecated legacy compatibility field. Usually `"none"`. Use `rulesEngineId` instead. |
 | `expectedPlayerUuids` | Players expected by launch context. |
 | `arrivedPlayerUuids` | Players that reached the arena runtime. |
 | `activePlayerUuids` | Players still active in the match runtime. |
@@ -207,7 +213,7 @@ public enum NexoriPlayerPlacementOutcome {
 | `CONFIRMED` | Nexori confirmed the player's initial placement. |
 | `FALLBACK` | Nexori reached a terminal fallback placement path for that player. |
 
-Both values are terminal for the individual player placement event. The match as a whole should still wait for `onMatchPlacementCompleted`.
+Both values are terminal for the individual player placement event. The match as a whole should still wait for `onMatchStartAllowed`.
 
 ## Match Lookup
 
@@ -294,12 +300,13 @@ if (!"capture_the_zone".equals(info.rulesEngineId())) {
 | `assignmentId` | Backend assignment id, when available. |
 | `externalMatchId` | Backend-owned match id, when available. |
 | `rulesEngineId` | Rules mod id that should control the match. |
-| `matchResolutionTriggerId` | Resolution trigger configured for the arena. Useful for diagnostics and advanced flows. |
+| `matchResolutionTriggerId` | Deprecated legacy compatibility field. Usually `"none"`. Use `rulesEngineId` instead. This exists only for older integrations and will be removed in a future API cleanup. |
 | `expectedPlayerUuids` | Players expected by launch context. |
 | `arrivedPlayerUuids` | Players that reached the arena runtime. |
 | `activePlayerUuids` | Players still active in the match runtime. |
 | `eliminatedPlayerUuids` | Players marked eliminated by Nexori/runtime state. |
 | `spectatorPlayerUuids` | Players marked as logical spectators. |
+| `afkPlayerUuids` | Players currently marked AFK in Nexori's local/runtime AFK state. |
 | `requiredResultPlayerUuids` | Players that must have an outcome before final submit. |
 | `playerOutcomes` | Accumulated outcome states set by `setPlayerOutcome(...)`. |
 | `expectedPlayerCount` | Expected player count. |
@@ -326,25 +333,6 @@ boolean ownedByThisMod = nexoriApi.findRulesEngineId(matchId)
     .isPresent();
 ```
 
-### `findMatchResolutionTriggerId`
-
-```java
-Optional<String> findMatchResolutionTriggerId(String matchId)
-```
-
-| Argument | Meaning |
-| --- | --- |
-| `matchId` | Active Nexori match id. |
-
-Returns the active match resolution trigger id. `none` or blank means manual/custom resolution.
-
-Most rules mods should not need this for normal ownership checks. Use `rulesEngineId` instead. This method is useful for diagnostics, admin tools, or advanced flows that need to show which arena resolver is configured.
-
-```java
-String triggerId = nexoriApi.findMatchResolutionTriggerId(matchId).orElse("");
-logger.atInfo().log("Match " + matchId + " trigger=" + triggerId);
-```
-
 ### `findMatchPlacementState`
 
 ```java
@@ -357,23 +345,50 @@ Optional<NexoriMatchPlacementState> findMatchPlacementState(String matchId)
 
 Returns Nexori's initial placement snapshot.
 
-Use this in direct integrations when you need the current placement snapshot. Modern callback adapters should prefer `onMatchPlacementCompleted`.
+Use this in direct integrations when you need the current placement/start-gate snapshot. Modern callback adapters should prefer lifecycle callbacks and use `onMatchStartAllowed` as the gameplay unlock signal.
 
 ```java
 NexoriMatchPlacementState placement = nexoriApi.findMatchPlacementState(matchId).orElse(null);
-if (placement == null || !placement.placementComplete()) {
+if (placement == null || !placement.startGateOpen()) {
     return;
 }
 ```
 
 `NexoriMatchPlacementState`:
 
+```java
+public record NexoriMatchPlacementState(
+    int expectedPlayers,
+    int arrivedPlayers,
+    int placedPlayers,
+    boolean placementComplete,
+    int minimumInitialPlayers,
+    boolean initialPlacementWindowOpen,
+    long initialPlacementWindowStartedAtEpochMs,
+    long initialPlacementWindowExpiresAtEpochMs,
+    long initialPlacementWindowClosedAtEpochMs,
+    String initialPlacementWindowCloseReason,
+    boolean startGateOpen,
+    long startGateOpenedAtEpochMs,
+    String startGateOpenReason
+)
+```
+
 | Field | Meaning |
 | --- | --- |
 | `expectedPlayers` | Players Nexori expects for the match. |
 | `arrivedPlayers` | Players that arrived at the arena runtime. |
 | `placedPlayers` | Players that completed initial placement. |
-| `placementComplete` | `true` once initial placement is complete. |
+| `placementComplete` | `true` once all expected initial players were placed. |
+| `minimumInitialPlayers` | Minimum placed initial players required for the initial placement window to allow a partial-roster start. |
+| `initialPlacementWindowOpen` | `true` while Nexori is still waiting for initial placement/window resolution. |
+| `initialPlacementWindowStartedAtEpochMs` | Time the initial placement window opened, or `0`. |
+| `initialPlacementWindowExpiresAtEpochMs` | Deadline for the initial placement window, or `0`. |
+| `initialPlacementWindowClosedAtEpochMs` | Time the initial placement window closed, or `0`. |
+| `initialPlacementWindowCloseReason` | Reason the initial placement window closed. |
+| `startGateOpen` | `true` once gameplay may start. This can be true even when `placementComplete=false` if the window closed and `minimumInitialPlayers` was satisfied. |
+| `startGateOpenedAtEpochMs` | Time the start gate opened, or `0`. |
+| `startGateOpenReason` | Reason Nexori opened the start gate. |
 
 ### `findMatchResultRequirements`
 
@@ -401,12 +416,14 @@ for (UUID playerUuid : requirements.requiredPlayerUuids()) {
 }
 ```
 
-Required players are derived like this:
+`requiredPlayerUuids` is a stable union of:
 
-| Condition | Required set |
-| --- | --- |
-| `expectedPlayerUuids` is not empty | `expectedPlayerUuids` |
-| `expectedPlayerUuids` is empty | `arrived + active + eliminated`, without duplicates |
+- `expectedPlayerUuids`
+- `arrivedPlayerUuids`
+- `activePlayerUuids`
+- `eliminatedPlayerUuids`
+
+This prevents backfill players or later arrivals from being left out of the final player set the rules mod must resolve.
 
 ## Player State
 
@@ -477,6 +494,14 @@ NexoriSetPlayerSpectatorResult setPlayerSpectator(
     boolean spectator,
     String reason
 )
+
+NexoriSetPlayerSpectatorResult setPlayerSpectator(
+    String matchId,
+    UUID playerUuid,
+    boolean spectator,
+    String reason,
+    String spectatorModelId
+)
 ```
 
 | Argument | Meaning |
@@ -485,8 +510,11 @@ NexoriSetPlayerSpectatorResult setPlayerSpectator(
 | `playerUuid` | Player to update. |
 | `spectator` | `true` to mark spectator, `false` to clear it. |
 | `reason` | Short reason for logs/debugging. |
+| `spectatorModelId` | Optional temporary spectator model id for the 5-argument overload. |
 
 Stores logical spectator state for one player.
+
+The 4-argument overload only stores logical spectator state. The 5-argument overload also lets Nexori attempt a temporary spectator model while the player is online. This is not a promise of full camera, invisibility, noclip, teleporting, or visual spectator controls.
 
 Call this when your rules mod wants Nexori to know that a player is still in the match context but no longer actively playing.
 
@@ -499,7 +527,7 @@ nexoriApi.setPlayerSpectator(
 );
 ```
 
-This is logical state only. It does not promise camera mode, invisibility, noclip, teleporting, or visual spectator controls.
+This is logical state only unless you use the optional model-id overload and the model can be applied.
 
 Status values:
 
@@ -510,6 +538,179 @@ Status values:
 | `PLAYER_MISSING` | Player does not belong to the match. |
 | `MATCH_ALREADY_COMPLETED` | Match was already completed. |
 | `INVALID_REASON` | Reason failed validation. |
+
+## AFK Activity And Detection
+
+AFK is local/runtime state exposed to minigame integrations. It appears in active match snapshots through `afkPlayerUuids`, dispatches optional callbacks, and may be included in final backend result reporting through `customData.nexoriAfk`.
+
+This AFK API only affects local runtime state. It does not send live backend AFK checks or change the match cancellation policy.
+
+### `registerAfkActivityListener`
+
+```java
+NexoriListenerRegistration registerAfkActivityListener(
+    String rulesEngineId,
+    NexoriAfkActivityListener listener
+)
+```
+
+Registers AFK callbacks for one rules engine id.
+
+```java
+public interface NexoriAfkActivityListener {
+    default void onPlayerAfkChanged(NexoriPlayerAfkChangedEvent event) {}
+}
+```
+
+Use this when your minigame wants to react to Nexori's local AFK state changes without polling active match snapshots.
+
+### `NexoriPlayerAfkChangedEvent`
+
+```java
+public record NexoriPlayerAfkChangedEvent(
+    String matchId,
+    String queueId,
+    String arenaId,
+    String rulesEngineId,
+    UUID playerUuid,
+    String playerName,
+    boolean afk,
+    long changedAtEpochMs,
+    long idleMs,
+    NexoriAfkActivitySource source
+)
+```
+
+| Field | Meaning |
+| --- | --- |
+| `matchId` | Active Nexori match id. |
+| `queueId` | Queue that launched or owns the match. |
+| `arenaId` | Arena/game id. |
+| `rulesEngineId` | Rules mod id for callback routing. |
+| `playerUuid` | Player whose AFK state changed. |
+| `playerName` | Player name snapshot when known. |
+| `afk` | New AFK state. |
+| `changedAtEpochMs` | Event time. |
+| `idleMs` | Player idle duration at the transition point. |
+| `source` | Source of the AFK transition. |
+
+Typical uses:
+
+- update minigame HUD/state
+- pause or mark a player in your own runtime
+- mirror AFK status into mode-specific stats
+
+### `NexoriAfkActivitySource`
+
+| Value | Meaning |
+| --- | --- |
+| `UNKNOWN` | Source was not specified. |
+| `IDLE_TIMEOUT` | Nexori's local inactivity detector marked the player AFK. |
+| `PLAYER_INPUT` | Player input/activity marked the player active. |
+| `INVENTORY_PACKET` | Inventory activity marked the player active. |
+| `POLICY_CHANGE` | A policy change reset or changed AFK state. |
+| `EXTERNAL_API` | A minigame integration changed AFK state through the public API. |
+
+### `NexoriAfkDetectionPolicy`
+
+```java
+public record NexoriAfkDetectionPolicy(
+    boolean enabled,
+    int inactivityTimeoutSeconds
+)
+```
+
+| Field | Meaning |
+| --- | --- |
+| `enabled` | Whether Nexori's built-in local detector should run for this scope. |
+| `inactivityTimeoutSeconds` | Idle timeout before a player becomes AFK. Default `30`, minimum `5`, maximum `3600`. |
+
+`NexoriAfkDetectionPolicy.defaults()` returns `enabled=false` and `inactivityTimeoutSeconds=30`. Runtime policies may be enabled at match or player scope. `inactivityTimeoutSeconds` is clamped/validated between `5` and `3600` seconds.
+
+If a minigame wants full AFK control, it can disable built-in detection with policy overrides and then call `setPlayerAfk(...)` from its own logic.
+
+### AFK Policy Overrides
+
+```java
+NexoriSetAfkDetectionPolicyResult setMatchAfkDetectionPolicy(
+    NexoriSetMatchAfkDetectionPolicyRequest request
+)
+
+NexoriSetAfkDetectionPolicyResult clearMatchAfkDetectionPolicy(String matchId)
+
+NexoriSetAfkDetectionPolicyResult setPlayerAfkDetectionPolicy(
+    NexoriSetPlayerAfkDetectionPolicyRequest request
+)
+
+NexoriSetAfkDetectionPolicyResult clearPlayerAfkDetectionPolicy(
+    String matchId,
+    UUID playerUuid
+)
+```
+
+Requests:
+
+```java
+public record NexoriSetMatchAfkDetectionPolicyRequest(
+    String matchId,
+    NexoriAfkDetectionPolicy policy
+) {
+}
+
+public record NexoriSetPlayerAfkDetectionPolicyRequest(
+    String matchId,
+    UUID playerUuid,
+    NexoriAfkDetectionPolicy policy
+) {
+}
+```
+
+Status values:
+
+| Value | Meaning |
+| --- | --- |
+| `UPDATED` | Policy override was stored. |
+| `CLEARED` | Policy override was cleared. |
+| `MATCH_MISSING` | Match does not exist. |
+| `PLAYER_MISSING` | Player does not belong to the match. |
+| `MATCH_ALREADY_COMPLETED` | Match was already completed. |
+| `INVALID_POLICY` | Request or policy was invalid. |
+| `NOT_SUPPORTED` | API implementation does not support runtime AFK policy overrides. |
+
+### `setPlayerAfk`
+
+```java
+NexoriSetPlayerAfkResult setPlayerAfk(
+    NexoriSetPlayerAfkRequest request
+)
+```
+
+Request:
+
+```java
+public record NexoriSetPlayerAfkRequest(
+    String matchId,
+    UUID playerUuid,
+    boolean afk,
+    String reason,
+    boolean showHud
+) {
+}
+```
+
+`showHud` controls whether Nexori shows its AFK HUD when marking a player AFK externally. Set it to `false` if your minigame handles its own AFK feedback.
+
+Status values:
+
+| Value | Meaning |
+| --- | --- |
+| `UPDATED` | AFK state changed. |
+| `UNCHANGED` | Player was already in the requested AFK state. |
+| `MATCH_MISSING` | Match does not exist. |
+| `PLAYER_MISSING` | Player does not belong to the match. |
+| `MATCH_ALREADY_COMPLETED` | Match was already completed. |
+| `INVALID_REQUEST` | Request, match id, or player UUID was invalid. |
+| `NOT_SUPPORTED` | API implementation does not support external AFK control. |
 
 ## Player Return
 
@@ -627,6 +828,29 @@ Result:
 | `resultId` | Durable result id when backend reporting was queued or matched. |
 | `message` | Human-readable detail for logs. |
 
+`matchStatus` is the local acceptance state for the final result inside Nexori. `backendReportStatus` is separate and describes what happened with optional backend reporting. A match can complete locally even when backend reporting is disabled, missing an external match id, already submitted, or queued for retry.
+
+`NexoriMatchCompletionStatus`:
+
+| Value | Meaning |
+| --- | --- |
+| `ACCEPTED` | Nexori accepted the final result locally. |
+| `ALREADY_SUBMITTED` | The match already has a submitted final result. |
+| `MATCH_MISSING` | Nexori does not know that match id. |
+| `INVALID_RESULT` | The submitted result failed local validation. |
+
+`NexoriBackendReportStatus`:
+
+| Value | Meaning |
+| --- | --- |
+| `QUEUED` | Backend result reporting was queued for sending. |
+| `DISABLED` | Backend result reporting is disabled or not usable for this match. |
+| `EXTERNAL_MATCH_MISSING` | The match completed locally, but has no backend-owned `externalMatchId` for result reporting. |
+| `STORE_FAILED` | Nexori could not persist the pending backend report. |
+| `ALREADY_SUBMITTED` | The same local result was already submitted. |
+| `DUPLICATE_CONFLICT` | A different final result was already submitted for the match. |
+| `NOT_ATTEMPTED` | Backend reporting was not attempted because local completion failed or the request was invalid. |
+
 `submitFinalMatchResult(...)` does not return players to lobby. Use `returnPlayerToLobby(...)` separately.
 
 ## Admission Control
@@ -692,6 +916,24 @@ if (result.status() != NexoriCloseMatchAdmissionStatus.CLOSED
 
 It marks admission closed locally and, when match admission reporting is enabled, Nexori sends a closed snapshot through `/nexori/matches/state`.
 
+Result:
+
+```java
+public record NexoriCloseMatchAdmissionResult(
+    NexoriCloseMatchAdmissionStatus status,
+    String matchId,
+    boolean closedLocally,
+    String message
+)
+```
+
+| Field | Meaning |
+| --- | --- |
+| `status` | Result status for the close request. |
+| `matchId` | Normalized match id the request targeted. |
+| `closedLocally` | `true` when Nexori closed admission in local runtime, even if backend reporting was disabled/unusable. |
+| `message` | Human-readable detail for logs. |
+
 Reasons:
 
 | Value | Meaning |
@@ -739,3 +981,20 @@ Use these result methods:
 2. `setPlayerSpectator(...)` when needed
 3. `submitFinalMatchResult(...)`
 4. `returnPlayerToLobby(...)` when players should leave the arena
+
+## Legacy Compatibility
+
+### `findMatchResolutionTriggerId` Deprecated
+
+```java
+@Deprecated(forRemoval = true)
+Optional<String> findMatchResolutionTriggerId(String matchId)
+```
+
+| Argument | Meaning |
+| --- | --- |
+| `matchId` | Active Nexori match id. |
+
+Returns `"none"` for active matches for older integrations that treated this field as manual/custom resolution. New mods should use `rulesEngineId` from `NexoriActiveMatchInfo` or `NexoriMatchLifecycleEvent` to identify the rules engine that owns the match.
+
+Do not use this method for new ownership checks. It exists only for compatibility and will be removed in a future API cleanup.

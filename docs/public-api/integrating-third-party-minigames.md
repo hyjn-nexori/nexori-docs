@@ -44,7 +44,7 @@ The integration layer connects both sides:
 - listens to Nexori lifecycle callbacks
 - creates or attaches a local room/session in the minigame
 - adds players to the local session
-- starts or unlocks gameplay after placement is complete
+- starts or unlocks gameplay when Nexori opens the match start gate
 - listens to the minigame's private events
 - reports winners/results/returns back to Nexori
 
@@ -85,8 +85,10 @@ flowchart TD
     A["Nexori<br/>onMatchCreated"] --> B["Adapter creates<br/>local session"]
     B --> C["Nexori<br/>onPlayerArrived"]
     C --> D["Adapter adds player<br/>to local session"]
-    D --> E["Nexori<br/>onMatchPlacementCompleted"]
-    E --> F["Adapter marks<br/>gameplay ready"]
+    D --> E["Nexori<br/>onMatchStartAllowed"]
+    D --> X["Nexori<br/>onMatchCancellationRequested"]
+    E --> F["Adapter unlocks<br/>gameplay"]
+    X --> Y["Adapter aborts<br/>local setup"]
     F --> G["Rules mod<br/>runs gameplay"]
     G --> H["Rules mod publishes<br/>match finished event"]
     H --> I["Adapter reports<br/>results to Nexori"]
@@ -146,6 +148,8 @@ public interface NexoriMatchLifecycleListener {
     default void onPlayerArrived(NexoriPlayerMatchLifecycleEvent event) {}
     default void onPlayerPlacementConfirmed(NexoriPlayerPlacementLifecycleEvent event) {}
     default void onMatchPlacementCompleted(NexoriMatchLifecycleEvent event) {}
+    default void onMatchStartAllowed(NexoriMatchLifecycleEvent event) {}
+    default void onMatchCancellationRequested(NexoriMatchLifecycleEvent event) {}
     default void onMatchCompleted(NexoriMatchLifecycleEvent event) {}
     default void onMatchRuntimeClosed(NexoriMatchLifecycleEvent event) {}
 }
@@ -171,11 +175,19 @@ registration.close();
 | `onMatchCreated` | Create or attach your local session/room. |
 | `onPlayerArrived` | Add the player to your local session. This is not a raw server connect event; Nexori has associated the player with a match. |
 | `onPlayerPlacementConfirmed` | Track individual placement progress, ready state, HUD, or debug state. Do not start gameplay from this alone. |
-| `onMatchPlacementCompleted` | Safe point to unlock/start gameplay. |
+| `onMatchPlacementCompleted` | Observe that all expected initial players were placed. Useful for readiness/debug state, but `onMatchStartAllowed` is the more general gameplay unlock signal. |
+| `onMatchStartAllowed` | Normal signal to unlock/start gameplay. This can happen after all expected players are placed, or after the initial placement window closes with `minimumInitialPlayers` satisfied. |
+| `onMatchCancellationRequested` | Abort local setup before normal gameplay starts. Stop countdowns, hide minigame HUDs, cancel timers, and clean local runtime state while Nexori handles the cancellation/no-contest flow. |
 | `onMatchCompleted` | Usually arrives after your integration called `submitFinalMatchResult(...)` and Nexori accepted or recorded completion. Treat it as confirmation/observation; use it for bookkeeping or logging, not another submit. |
 | `onMatchRuntimeClosed` | Clean up local session memory. |
 
 After Nexori has attached a player to your local session, your minigame owns what happens next. For example, if that player disconnects, detect it through your own runtime/Hytale event handling, decide your game's policy, then publish a private minigame event. Your integration layer can translate that event to `setPlayerOutcome(...)` with `LOSS` or `DISCONNECTED`, or do nothing immediately if your game supports reconnect grace. Keep that policy in your minigame; use Nexori commands only to report the outcome you decided.
+
+Use `onMatchStartAllowed` as the normal gameplay unlock signal. `onMatchPlacementCompleted` means every expected initial player was placed, but the start gate can also open with a partial roster after the initial placement window closes and `minimumInitialPlayers` is satisfied.
+
+Use `onMatchCancellationRequested` for local cleanup when Nexori cancels before normal gameplay starts. Do not submit another final result from that callback; stop countdowns, abort setup, hide your own HUDs, cancel timers, and let Nexori finish its cancellation/no-contest flow.
+
+AFK is an optional integration surface. Rules mods can listen to AFK changes or override AFK state/policies when their minigame needs custom AFK behavior. AFK is local/runtime state and is not a backend live cancellation mechanism.
 
 ## Minigame Private Events
 
@@ -224,6 +236,12 @@ eventBus.register(MatchFinishedEvent.class, event -> {
     }
 });
 ```
+
+::: info Use Nexori's Result Requirement Set
+For final result submission, treat `findMatchResultRequirements(matchId).requiredPlayerUuids()` as Nexori's official result requirement set. It is a stable union of expected, arrived, active, and eliminated players known by Nexori.
+
+Your minigame can keep its own local participant list for gameplay, HUD, scoring, or private events. Before calling `submitFinalMatchResult(...)`, build outcomes from Nexori's required set or validate that your local list covers it.
+:::
 
 Keep this listener out of your gameplay core.
 
@@ -280,7 +298,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.hyjn-nexori:nexori-api:v2.4.0")
+    compileOnly("com.github.hyjn-nexori:nexori-api:v2.5.0")
 }
 ```
 
@@ -302,7 +320,7 @@ When the minigame ends:
 | --- | --- |
 | Calling Nexori from the rules engine | Your core will not load without Nexori. |
 | Polling Nexori every tick | Lifecycle callbacks already carry the semantic match transitions. |
-| Starting gameplay on `onPlayerPlacementConfirmed` | That callback is per-player. Wait for `onMatchPlacementCompleted`. |
+| Starting gameplay on `onPlayerPlacementConfirmed` | That callback is per-player. Wait for `onMatchStartAllowed`. |
 | Resubmitting results from `onMatchCompleted` | That creates loops or duplicate reports. |
 | Publishing private events while holding long locks | Optional integrations may call back into Nexori. Dispatch outside locks. |
 | Exposing your mutable runtime objects as events | Use immutable snapshots or records. |

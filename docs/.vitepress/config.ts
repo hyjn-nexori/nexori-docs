@@ -10,7 +10,8 @@ export default withMermaid(
       logo: "/images/nexori-logo-transparent.png",
       nav: [
         { text: "Backend", link: "/backend/overview" },
-        { text: "Public API", link: "/public-api/minigame-api" },
+        { text: "API Guide", link: "/public-api/minigame-api" },
+        { text: "Javadoc", link: "/public-api/generated-reference" },
         { text: "Download", link: "https://www.curseforge.com/hytale/mods/nexori" }
       ],
       sidebar: [
@@ -25,12 +26,13 @@ export default withMermaid(
           ]
         },
         {
-          text: "Public API",
+          text: "API Guide",
           items: [
             { text: "Minigame API", link: "/public-api/minigame-api" },
             { text: "Integrating Third-Party Minigames", link: "/public-api/integrating-third-party-minigames" },
             { text: "Methods", link: "/public-api/methods" },
-            { text: "Recommended Flow", link: "/public-api/recommended-flow" }
+            { text: "Recommended Flow", link: "/public-api/recommended-flow" },
+            { text: "Javadoc Reference", link: "/public-api/generated-reference" }
           ]
         },
         {

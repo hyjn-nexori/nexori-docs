@@ -1,0 +1,1 @@
+packageSearchIndex = [{"l":"All Packages","u":"allpackages-index.html","k":"18"},{"l":"io.github.hyjn.nexori.plugin.api.minigame"}];updateSearchResults();

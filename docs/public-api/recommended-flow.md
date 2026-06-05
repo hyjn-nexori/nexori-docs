@@ -9,8 +9,10 @@ flowchart TD
     A["onMatchCreated"] --> B["Create local<br/>session"]
     B --> C["onPlayerArrived"]
     C --> D["Add player<br/>to session"]
-    D --> E["onMatchPlacementCompleted"]
+    D --> E["onMatchStartAllowed"]
+    D --> X["onMatchCancellationRequested"]
     E --> F["Unlock<br/>gameplay"]
+    X --> Y["Abort local<br/>setup"]
     F --> G["Run minigame<br/>rules"]
     G --> H["Private match<br/>finished event"]
     H --> I["Set player<br/>outcomes"]
@@ -68,21 +70,35 @@ Nexori uses that id to route lifecycle events to your adapter. The adapter can a
 
 Keep the id stable, specific, and documented for server operators. Once the adapter creates the local session, the core should run from that local session state.
 
-## 4. Wait For Placement
+## 4. Wait For Start Gate
 
 Arrival is not the same as placement. Nexori may still be preparing the instance, assigning spawn points, and positioning players.
 
-With callbacks, wait for `onMatchPlacementCompleted`.
+With callbacks, wait for `onMatchStartAllowed`.
 
 ```java
-public void onMatchPlacementCompleted(NexoriMatchLifecycleEvent event) {
-    service.updatePlacement(event.matchId(), true);
+public void onMatchStartAllowed(NexoriMatchLifecycleEvent event) {
+    service.unlockGameplay(event.matchId(), event.placementState());
 }
 ```
 
-Only start position-sensitive gameplay after match placement is complete.
+Only start position-sensitive gameplay after the start gate opens. The start gate may open because all expected initial players were placed, or because the initial placement window closed with `minimumInitialPlayers` satisfied.
 
-Good things to delay until placement completes:
+`onPlayerPlacementConfirmed` is a per-player placement event. Use it for HUD/debug/ready state, not to start the match by itself.
+
+`onMatchPlacementCompleted` is still useful when you care that every expected initial player was placed, but it is not the most general gameplay-start signal once initial placement windows and partial rosters exist.
+
+Handle the opposite branch too:
+
+```java
+public void onMatchCancellationRequested(NexoriMatchLifecycleEvent event) {
+    service.abortSetup(event.matchId(), event.reason());
+}
+```
+
+Use cancellation requested to stop countdowns, abort local setup, hide minigame HUDs, cancel timers, and clean runtime state. Do not start gameplay from this branch.
+
+Good things to delay until the start gate opens:
 
 - objective checks
 - PvP enablement
@@ -106,7 +122,7 @@ Use direct queries when your code intentionally talks to `NexoriMinigameApi` at 
 
 ## 5. Run Your Minigame Logic
 
-After ownership and placement are confirmed, Nexori steps back. Your rules mod owns the mode-specific logic.
+After ownership and the start gate are confirmed, Nexori steps back. Your rules mod owns the mode-specific logic.
 
 Examples:
 
@@ -234,7 +250,7 @@ This separation keeps spectator flows possible: an eliminated player can stay in
 | --- | --- |
 | Calling Nexori directly from a soft-dependent rules engine | Your core will require Nexori at runtime. |
 | Running logic before ownership check | Multiple minigames on one arena server can interfere with each other. |
-| Starting gameplay before placement completes | Players may not be in their final spawn positions yet. |
+| Starting gameplay before `onMatchStartAllowed` | Players may not be ready, or Nexori may still be waiting for the initial placement window to resolve. |
 | Returning players from `submitFinalMatchResult(...)` | Return is intentionally separate. |
 | Sending stats through fixed Nexori fields | Use `customData` for mode-specific data. |
 | Re-checking immutable ownership every objective calculation | Cache the accepted match runtime once. |

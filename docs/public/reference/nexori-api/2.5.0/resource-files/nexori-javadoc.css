@@ -1,0 +1,285 @@
+/*
+ * Small Nexori layer on top of the standard Javadoc stylesheet.
+ * Most colors are set through the official stylesheet variables so generated
+ * navigation, search, sidebar, and table layouts stay intact.
+ */
+:root {
+    --nexori-bg: #111218;
+    --nexori-surface: #171923;
+    --nexori-surface-soft: #202333;
+    --nexori-surface-raised: #272b3d;
+    --nexori-border: #3a4056;
+    --nexori-text: #eef0f8;
+    --nexori-muted: #bcc3d7;
+    --nexori-accent: #9aa6ff;
+    --nexori-accent-strong: #c2c8ff;
+    --nexori-warm: #f5ba64;
+
+    --body-text-color: var(--nexori-text);
+    --block-text-color: var(--nexori-muted);
+    --body-background-color: var(--nexori-bg);
+    --section-background-color: var(--nexori-bg);
+    --detail-background-color: var(--nexori-surface);
+    --code-background-color: #0c0e15;
+    --mark-background-color: var(--nexori-surface-raised);
+    --detail-block-color: var(--nexori-surface-soft);
+    --navbar-background-color: var(--nexori-surface);
+    --navbar-text-color: var(--nexori-text);
+    --subnav-background-color: var(--nexori-surface-soft);
+    --subnav-link-color: var(--nexori-accent-strong);
+    --member-heading-background-color: var(--nexori-surface-soft);
+    --selected-background-color: var(--nexori-accent);
+    --selected-text-color: #101218;
+    --selected-link-color: var(--nexori-accent-strong);
+    --table-header-color: var(--nexori-surface-soft);
+    --even-row-color: var(--nexori-surface);
+    --odd-row-color: #1d2030;
+    --title-color: var(--nexori-text);
+    --link-color: var(--nexori-accent);
+    --link-color-active: var(--nexori-warm);
+    --toc-background-color: var(--nexori-surface);
+    --toc-highlight-color: var(--nexori-surface-raised);
+    --toc-hover-color: var(--nexori-surface-soft);
+    --snippet-background-color: #0c0e15;
+    --snippet-text-color: var(--nexori-text);
+    --snippet-highlight-color: #443013;
+    --pre-background-color: #0c0e15;
+    --pre-text-color: var(--nexori-text);
+    --border-color: var(--nexori-border);
+    --table-border-color: var(--nexori-border);
+    --search-input-background-color: #0c0e15;
+    --search-input-text-color: var(--nexori-text);
+    --search-input-placeholder-color: #8d95ad;
+    --search-tag-highlight-color: #443013;
+    --button-border-color: var(--nexori-border);
+    --invalid-tag-background-color: #4b2028;
+    --invalid-tag-text-color: var(--nexori-text);
+}
+
+html,
+body,
+header,
+.main-grid,
+main {
+    background: var(--body-background-color);
+}
+
+body {
+    line-height: 1.58;
+}
+
+a,
+a:link,
+a:visited,
+nav a:link,
+nav a:visited {
+    color: var(--link-color);
+}
+
+a:hover,
+a:focus,
+a[href]:hover,
+a[href]:active {
+    color: var(--link-color-active);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.title,
+.type-name-label,
+.element-name,
+.member-name-link,
+.return-type,
+.parameters,
+.exceptions {
+    color: var(--nexori-text);
+}
+
+.top-nav,
+.sub-nav,
+.header,
+.class-description,
+.package-description,
+.summary,
+.details,
+.detail,
+.serialized-class-details,
+.page-search-info,
+.page-search-header,
+details.page-search-details {
+    background-color: var(--body-background-color);
+    color: var(--nexori-text);
+}
+
+.top-nav,
+.sub-nav {
+    border-bottom: 1px solid var(--nexori-border);
+}
+
+.nav-bar-cell1-rev,
+body.class-declaration-page section.detail:target > h3,
+body.class-declaration-page section.detail > h3:target,
+div.table-tabs > .active-table-tab {
+    background: var(--selected-background-color);
+    color: var(--selected-text-color);
+}
+
+.main-grid nav.toc,
+.top-nav nav.toc {
+    background-color: var(--toc-background-color);
+    border-right: 1px solid var(--nexori-border);
+}
+
+nav.toc div.toc-header,
+.main-grid nav.toc button,
+.top-nav nav.toc button {
+    background-color: var(--toc-background-color);
+    color: var(--nexori-text);
+}
+
+nav.toc a,
+nav.toc a:link,
+nav.toc a:visited {
+    color: var(--nexori-muted);
+}
+
+nav.toc a:hover,
+nav.toc a:focus,
+nav.toc a.current-selection {
+    background-color: var(--toc-hover-color);
+    color: var(--nexori-text);
+}
+
+input#search-input,
+input#page-search-input,
+input.filter-input,
+select#search-modules {
+    background-color: var(--search-input-background-color);
+    border: 1px solid var(--nexori-border);
+    color: var(--search-input-text-color);
+}
+
+input#reset-search,
+input.reset-filter,
+input#page-search-reset,
+button,
+button.copy,
+button#page-search-copy {
+    color: var(--nexori-text);
+}
+
+.summary-table,
+.details-table,
+.constants-summary,
+.requires-summary,
+.packages-summary,
+.uses-summary,
+.member-summary,
+.type-summary,
+table {
+    border-color: var(--nexori-border);
+}
+
+.table-header,
+.col-first,
+.col-second,
+.col-last,
+th,
+td {
+    border-color: var(--nexori-border);
+}
+
+.table-header,
+th {
+    background-color: var(--table-header-color);
+    color: var(--nexori-text);
+}
+
+.even-row-color {
+    background-color: var(--even-row-color);
+}
+
+.odd-row-color {
+    background-color: var(--odd-row-color);
+}
+
+div.table-tabs > button,
+div.table-tabs > button.table-tab {
+    background: var(--nexori-surface-raised);
+    border-color: var(--nexori-border);
+    color: var(--nexori-text);
+}
+
+code,
+pre,
+.snippet,
+.snippet-container,
+.member-signature {
+    background: var(--code-background-color);
+    color: var(--nexori-text);
+}
+
+pre,
+.member-signature {
+    border: 1px solid var(--nexori-border);
+    border-radius: 6px;
+}
+
+code {
+    border-radius: 4px;
+    padding: 0.05rem 0.22rem;
+}
+
+.member-signature {
+    padding: 0.72rem 0.85rem;
+}
+
+.block,
+.notes,
+dl.notes > dd,
+.deprecation-comment,
+.deprecated-content {
+    color: var(--nexori-muted);
+}
+
+.ui-widget-content,
+.ui-autocomplete,
+ul.ui-autocomplete,
+.ui-menu-item-wrapper,
+.ui-autocomplete > li,
+.ui-autocomplete > li > div,
+.ui-autocomplete > li.result-item,
+.ui-autocomplete > li.result-item > div,
+#result-container div.result-table > a.search-result-link {
+    background-color: var(--nexori-surface);
+    border-color: var(--nexori-border);
+    color: var(--nexori-text);
+}
+
+.ui-autocomplete-category,
+ul.ui-autocomplete li.ui-static-link,
+#result-container div.result-table > a.search-result-link:nth-child(odd),
+#result-container div.result-table > a.search-result-link:nth-child(even) {
+    background-color: var(--nexori-surface-soft);
+}
+
+.ui-menu .ui-state-active,
+#result-container div.result-table > a.search-result-link:focus-visible,
+#result-container div.result-table > a.search-result-link.selected {
+    background-color: var(--selected-background-color);
+    color: var(--selected-text-color);
+}
+
+.search-result-desc,
+.page-search-info,
+.legal-copy {
+    color: var(--nexori-muted);
+}
+
+hr {
+    border-color: var(--nexori-border);
+}

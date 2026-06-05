@@ -2,7 +2,7 @@
 
 The Nexori Minigame API is the supported integration surface for gameplay and rules mods running inside a Nexori-managed arena.
 
-Use it when your mod owns the game rules while Nexori owns the infrastructure around the match: active match identity, launch context, placement readiness, local match completion, return-to-lobby, and optional backend result reporting.
+Use it when your mod owns the game rules while Nexori owns the infrastructure around the match: active match identity, launch context, initial placement/start gate, local AFK runtime state, local match completion, return-to-lobby, and optional backend result reporting.
 
 ::: tip Integration shape
 Soft-dependent rules mods can use lifecycle callbacks to create/attach local sessions, publish private minigame events from the gameplay core, and translate those events to Nexori commands from a separate integration layer.
@@ -22,7 +22,9 @@ The live API instance is exposed from:
 NexoriPlugin#getMinigameApi()
 ```
 
-Treat services outside the public API package as Nexori internals. Queue services, travel services, backend services, arena runtime classes, and UI classes are implementation details.
+Third-party minigames integrate with Nexori through the public `nexori-api` artifact. The API gives the rules mod the lifecycle events, match snapshots, player state operations, and result submission methods it needs, while the installed Nexori plugin handles the runtime behavior on the server.
+
+In practice, your minigame should compile against `nexori-api` and expect `nexori-plugin` to be present on the server at runtime.
 
 ## Sections
 
@@ -31,6 +33,7 @@ Treat services outside the public API package as Nexori internals. Queue service
 | [Integrating Third-Party Minigames](/public-api/integrating-third-party-minigames) | Callbacks, private minigame events, optional adapter, and soft dependency. |
 | [Methods](/public-api/methods) | Method signatures, arguments, return types, short usage notes, and small snippets. |
 | [Recommended Flow](/public-api/recommended-flow) | Command/result flow and ownership gates for direct or adapter-based integrations. |
+| [Javadoc Reference](/public-api/generated-reference) | Generated Javadoc for exact Java classes, records, enums, and method signatures. |
 
 ## Integration Model
 
@@ -38,7 +41,7 @@ Nexori and the rules mod should divide responsibilities cleanly.
 
 | Layer | Responsibility |
 | --- | --- |
-| Nexori | Queue handoff, secure travel, arena identity, placement readiness, local match completion, return-to-lobby, backend result transport. |
+| Nexori | Queue handoff, secure travel, arena identity, initial placement/start gate, local AFK activity snapshots, local match completion, return-to-lobby, backend result transport. |
 | Rules mod | Game logic, objectives, scoring, win/loss decisions, spectator decisions, mode-specific stats, final custom result data. |
 | Backend | Optional matchmaking, ratings, rankings, tournaments, leaderboards, player history. |
 
@@ -78,11 +81,11 @@ repositories {
 
 dependencies {
     implementation(files("$hytaleHome/install/$patchline/package/game/latest/Server/HytaleServer.jar"))
-    compileOnly("com.github.hyjn-nexori:nexori-api:v2.4.0")
+    compileOnly("com.github.hyjn-nexori:nexori-api:v2.5.0")
 }
 ```
 
-Developers compile against `nexori-api` v2.4.0 through JitPack. Server owners install the full `nexori-plugin.jar` from CurseForge. Do not install `nexori-api.jar` as a server mod, do not use `implementation`, and do not shade or bundle `nexori-api` inside your minigame jar. The installed Nexori plugin provides the API classes at runtime.
+Developers compile against `nexori-api` v2.5.0 through JitPack. Server owners install the full `nexori-plugin.jar` from CurseForge. Do not install `nexori-api.jar` as a server mod, do not use `implementation`, and do not shade or bundle `nexori-api` inside your minigame jar. The installed Nexori plugin provides the API classes at runtime.
 
 ### Resolve The API
 
